@@ -30,7 +30,8 @@ const api = {
   getStorageToolConfig: (toolId: string) => electronAPI.ipcRenderer.invoke('storage:getToolConfig', toolId),
   saveStorageToolConfig: (toolId: string, config: any) => electronAPI.ipcRenderer.invoke('storage:saveToolConfig', toolId, config),
   updateToolEnabled: (toolId: string, enabled: boolean) => electronAPI.ipcRenderer.invoke('storage:updateToolEnabled', toolId, enabled),
-  updateToolSkills: (toolId: string, skillId: string, enabled: boolean) => electronAPI.ipcRenderer.invoke('storage:updateToolSkills', toolId, skillId, enabled)
+  updateToolSkills: (toolId: string, skillId: string, enabled: boolean) => electronAPI.ipcRenderer.invoke('storage:updateToolSkills', toolId, skillId, enabled),
+  updateToolInstallation: (toolId: string, installed: boolean, configPath: string, skillsPath: string) => electronAPI.ipcRenderer.invoke('storage:updateToolInstallation', toolId, installed, configPath, skillsPath)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

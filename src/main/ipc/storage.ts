@@ -7,7 +7,8 @@ import {
   getToolConfig,
   saveToolConfig,
   updateToolEnabled,
-  updateToolSkills
+  updateToolSkills,
+  updateToolInstallation
 } from '../storage'
 
 /**
@@ -60,6 +61,12 @@ export function registerStorageHandlers(): void {
   ipcMain.handle('storage:updateToolSkills', async (_event, toolId: string, skillId: string, enabled: boolean) => {
     console.log('[IPC] 更新工具 Skills 状态:', toolId, skillId, enabled)
     return updateToolSkills(toolId, skillId, enabled)
+  })
+
+  // 更新工具安装状态和路径
+  ipcMain.handle('storage:updateToolInstallation', async (_event, toolId: string, installed: boolean, configPath: string, skillsPath: string) => {
+    console.log('[IPC] 更新工具安装状态:', toolId, installed)
+    return updateToolInstallation(toolId, installed, configPath, skillsPath)
   })
 
   console.log('[IPC] 存储处理函数注册完成')

@@ -174,6 +174,28 @@ export function updateToolSkills(toolId: string, skillId: string, enabled: boole
 }
 
 /**
+ * 更新工具的安装状态和路径
+ */
+export function updateToolInstallation(toolId: string, installed: boolean, configPath: string, skillsPath: string): boolean {
+  const toolsState = getToolsState()
+  if (!toolsState.tools[toolId]) {
+    toolsState.tools[toolId] = {
+      enabled: false,
+      installed: false,
+      configPath: '',
+      skillsPath: '',
+      enabledSkills: {}
+    }
+  }
+  
+  toolsState.tools[toolId].installed = installed
+  toolsState.tools[toolId].configPath = configPath
+  toolsState.tools[toolId].skillsPath = skillsPath
+  
+  return saveToolsState(toolsState)
+}
+
+/**
  * 初始化存储（应用启动时调用）
  */
 export function initStorage(): void {

@@ -282,20 +282,20 @@ const loadTools = async () => {
       iconPath: getToolIconPath(nameToId(tool.name))
     }))
     
-    // 2. 检查工具安装状态（更新 installed 和路径）
-    await checkToolsInstallation()
-    
-    // 3. 从持久化存储加载工具状态
+    // 2. 从持久化存储加载工具状态（包括 installed、路径、enabled）
     // @ts-ignore
     const toolsState = await window.api.getToolsState()
     console.log('[Tools] 加载的工具状态:', toolsState)
     
-    // 4. 合并状态到工具列表
+    // 3. 合并状态到工具列表
     toolsData.value.forEach(tool => {
       const savedState = toolsState.tools[tool.id]
       if (savedState) {
         tool.enabled = savedState.enabled || false
-        console.log(`[Tools] ${tool.name} 启用状态: ${tool.enabled}`)
+        tool.installed = savedState.installed || false
+        tool.configPath = savedState.configPath || ''
+        tool.skillsPath = savedState.skillsPath || ''
+        console.log(`[Tools] ${tool.name} - 启用: ${tool.enabled}, 安装: ${tool.installed}`)
       }
     })
     
@@ -308,20 +308,36 @@ const loadTools = async () => {
 // 检查工具安装状态（只更新 installed 和路径，不更新 enabled 状态）
 const checkToolsInstallation = async () => {
   try {
+    console.log('[Tools] 开始检测工具安装状态...')
+    
     const results = await window.api.checkToolsInstallation(
       toolsConfigData.map(t => ({ name: t.name, dirName: t.dirName }))
     )
     
+    // 更新工具列表的安装状态
     results.forEach(result => {
       const tool = toolsData.value.find(t => t.id === result.id)
       if (tool) {
-        tool.installed = result.installed  // 更新安装状态
+        tool.installed = result.installed
         tool.configPath = result.configPath
         tool.skillsPath = result.skillsPath
       }
     })
+    
+    // 保存安装状态到持久化存储
+    for (const result of results) {
+      // @ts-ignore
+      await window.api.updateToolInstallation(
+        result.id,
+        result.installed,
+        result.configPath,
+        result.skillsPath
+      )
+    }
+    
+    console.log('[Tools] 工具安装状态检测完成')
   } catch (error) {
-    console.error('检查工具安装状态失败:', error)
+    console.error('[Tools] 检查工具安装状态失败:', error)
   }
 }
 
@@ -330,16 +346,18 @@ const filteredTools = computed(() => {
   if (currentTab.value === '全部') {
     return toolsData.value
   } else if (currentTab.value === '已安装') {
-    return toolsData.value.filter(t => t.configPath !== '')
+    return toolsData.value.filter(t => t.installed)
   } else {
-    return toolsData.value.filter(t => t.configPath === '')
+    return toolsData.value.filter(t => !t.installed)
   }
 })
 
 // 刷新工具列表
 const refreshTools = async () => {
-  await loadTools()
-  console.log('工具列表已刷新')
+  console.log('[Tools] 刷新工具列表...')
+  // 重新检测安装状态
+  await checkToolsInstallation()
+  console.log('[Tools] 工具列表已刷新')
 }
 
 // 切换工具开关
