@@ -319,3 +319,8 @@ For questions or suggestions, feel free to contact:
 Made with ❤️
 
 </div>
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=hadesgeek/skills-manager-tool&type=Date)](https://star-history.com/#hadesgeek/skills-manager-tool&Date)
+
+![Views](https://komarev.com/ghpvc/?username=hadesgeek&repo=skills-manager-tool&label=Repository%20views&color=blue&style=flat)
