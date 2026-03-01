@@ -11,8 +11,12 @@ declare global {
       
       // Skills 管理
       getSkills: (dirPath: string, apiKey?: string) => Promise<any[]>
+      getSkillsFast: (dirPath: string) => Promise<any[]>
+      translateSkillDesc: (skillPath: string, apiKey: string) => Promise<{ desc: string }>
+      generateSkillIcon: (skillName: string, skillDesc: string, apiKey: string) => Promise<{ icon: string }>
       readDirTree: (dirPath: string) => Promise<any>
       readFile: (filePath: string) => Promise<string | null>
+      writeFile: (filePath: string, content: string) => Promise<boolean>
       translateAndSave: (filePath: string, apiKey: string) => Promise<string>
       
       // 工具管理
@@ -38,6 +42,15 @@ declare global {
       updateToolEnabled: (toolId: string, enabled: boolean) => Promise<boolean>
       updateToolSkills: (toolId: string, skillId: string, enabled: boolean) => Promise<boolean>
       updateToolInstallation: (toolId: string, installed: boolean, configPath: string, skillsPath: string) => Promise<boolean>
+      
+      // 日志管理
+      getLogPath: () => Promise<string>
+      getLogDir: () => Promise<string>
+      readLogs: () => Promise<string>
+      clearLogs: () => Promise<boolean>
+      
+      // 开发者工具
+      toggleDevTools: () => Promise<boolean>
       
       // 对话框
       openDirectory: () => Promise<string | null>

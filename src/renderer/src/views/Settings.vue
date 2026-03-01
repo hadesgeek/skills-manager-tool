@@ -21,8 +21,8 @@
                 <span class="setting-desc">所有 Skills 的存储位置</span>
               </div>
               <div class="setting-action">
-                <span class="path-text" :title="skillsDirectory">{{ skillsDirectory }}</span>
-                <button class="action-btn">更改</button>
+                <span class="path-text" :title="skillsDirectory">{{ skillsDirectory || '未配置' }}</span>
+                <button class="action-btn" @click="selectSkillsDirectory">更改</button>
               </div>
             </div>
             
@@ -193,6 +193,20 @@
           </div>
         </section>
 
+        <!-- 应用日志 - 只在开发环境显示 -->
+        <section v-if="isDev" class="settings-section">
+          <div class="section-header">
+            <h2 class="section-title">应用日志</h2>
+            <button class="devtools-btn" @click="toggleDevTools">
+              <span class="icon">🔧</span>
+              <span>打开开发者工具</span>
+            </button>
+          </div>
+          <div class="settings-card log-viewer-card">
+            <LogViewer />
+          </div>
+        </section>
+
         <!-- 关于 -->
         <section class="settings-section">
           <h2 class="section-title">关于</h2>
@@ -215,9 +229,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import LogViewer from '../components/LogViewer.vue'
 
 // 响应式数据
 const loading = ref(true)
+const isDev = ref(import.meta.env.DEV) // 判断是否为开发环境
 const skillsDirectory = ref('')
 const defaultEditor = ref('built-in')
 const autoSync = ref(true)
@@ -321,6 +337,32 @@ function setLanguage(newLanguage: string) {
   language.value = newLanguage
 }
 
+// 选择 Skills 目录
+async function selectSkillsDirectory() {
+  try {
+    // @ts-ignore
+    const result = await window.api.openDirectory()
+    if (result) {
+      skillsDirectory.value = result
+      console.log('[Settings] 选择的目录:', result)
+    }
+  } catch (error) {
+    console.error('[Settings] 选择目录失败:', error)
+    alert('选择目录失败，请重试')
+  }
+}
+
+// 打开/关闭开发者工具
+async function toggleDevTools() {
+  try {
+    // @ts-ignore
+    const isOpen = await window.api.toggleDevTools()
+    console.log('[Settings] DevTools 状态:', isOpen ? '已打开' : '已关闭')
+  } catch (error) {
+    console.error('[Settings] 切换 DevTools 失败:', error)
+  }
+}
+
 onMounted(() => {
   loadSettings()
 })
@@ -396,11 +438,42 @@ onMounted(() => {
   gap: 16px;
 }
 
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .section-title {
   font-size: 16px;
   font-weight: 600;
   color: #1F2937;
   margin: 0;
+}
+
+.devtools-btn {
+  height: 32px;
+  padding: 0 12px;
+  background-color: #F3F4F6;
+  color: #374151;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.devtools-btn:hover {
+  background-color: #E5E7EB;
+  border-color: #9CA3AF;
+}
+
+.devtools-btn .icon {
+  font-size: 14px;
 }
 
 /* 设置卡片容器 */
@@ -669,5 +742,12 @@ input:checked + .slider:before {
 
 .privacy-link:hover {
   text-decoration: underline;
+}
+
+/* 日志查看器卡片 */
+.log-viewer-card {
+  padding: 0;
+  height: 500px;
+  overflow: hidden;
 }
 </style>

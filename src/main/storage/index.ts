@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import fs from 'fs'
 import path from 'path'
+import { logger } from '../logger'
 
 // 数据目录路径
 const DATA_DIR = path.join(app.getPath('userData'), 'data')
@@ -21,7 +22,7 @@ let cacheTimestamp = {
 const DEFAULT_APP_SETTINGS = {
   version: '1.0.0',
   general: {
-    skillsDirectory: 'E:\\AITools\\SKillsManager\\Skills',
+    skillsDirectory: '', // 用户必须在设置中配置
     defaultEditor: 'vditor',
     autoSync: true,
     syncNotification: true
@@ -54,7 +55,7 @@ const DEFAULT_TOOLS_STATE = {
 function ensureDataDir(): void {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true })
-    console.log('[Storage] 创建数据目录:', DATA_DIR)
+    logger.info('[Storage] 创建数据目录:', DATA_DIR)
   }
 }
 
@@ -64,7 +65,7 @@ function ensureDataDir(): void {
 function readJsonFile<T>(filePath: string, defaultValue: T, useCache: boolean = true): T {
   try {
     if (!fs.existsSync(filePath)) {
-      console.log(`[Storage] 文件不存在，使用默认值: ${filePath}`)
+      logger.info(`[Storage] 文件不存在，使用默认值: ${filePath}`)
       return defaultValue
     }
     
@@ -74,19 +75,19 @@ function readJsonFile<T>(filePath: string, defaultValue: T, useCache: boolean = 
       const fileModTime = stats.mtimeMs
       
       if (filePath === APP_SETTINGS_FILE && appSettingsCache && cacheTimestamp.appSettings >= fileModTime) {
-        console.log(`[Storage] 使用缓存: ${filePath}`)
+        logger.debug(`[Storage] 使用缓存: ${filePath}`)
         return appSettingsCache
       }
       
       if (filePath === TOOLS_STATE_FILE && toolsStateCache && cacheTimestamp.toolsState >= fileModTime) {
-        console.log(`[Storage] 使用缓存: ${filePath}`)
+        logger.debug(`[Storage] 使用缓存: ${filePath}`)
         return toolsStateCache
       }
     }
     
     const content = fs.readFileSync(filePath, 'utf8')
     const data = JSON.parse(content)
-    console.log(`[Storage] 读取文件成功: ${filePath}`)
+    logger.info(`[Storage] 读取文件成功: ${filePath}`)
     
     // 更新缓存
     if (useCache) {
@@ -102,7 +103,7 @@ function readJsonFile<T>(filePath: string, defaultValue: T, useCache: boolean = 
     
     return data
   } catch (error) {
-    console.error(`[Storage] 读取文件失败: ${filePath}`, error)
+    logger.error(`[Storage] 读取文件失败: ${filePath}`, error)
     return defaultValue
   }
 }
@@ -115,7 +116,7 @@ function writeJsonFile(filePath: string, data: any): boolean {
     ensureDataDir()
     const content = JSON.stringify(data, null, 2)
     fs.writeFileSync(filePath, content, 'utf8')
-    console.log(`[Storage] 写入文件成功: ${filePath}`)
+    logger.info(`[Storage] 写入文件成功: ${filePath}`)
     
     // 清除对应的缓存，强制下次重新读取
     if (filePath === APP_SETTINGS_FILE) {
@@ -128,7 +129,7 @@ function writeJsonFile(filePath: string, data: any): boolean {
     
     return true
   } catch (error) {
-    console.error(`[Storage] 写入文件失败: ${filePath}`, error)
+    logger.error(`[Storage] 写入文件失败: ${filePath}`, error)
     return false
   }
 }
@@ -137,7 +138,23 @@ function writeJsonFile(filePath: string, data: any): boolean {
  * 获取应用设置
  */
 export function getAppSettings(): any {
-  return readJsonFile(APP_SETTINGS_FILE, DEFAULT_APP_SETTINGS)
+  const settings = readJsonFile(APP_SETTINGS_FILE, DEFAULT_APP_SETTINGS)
+  
+  // 检查 Skills 目录是否已配置
+  if (!settings.general.skillsDirectory) {
+    logger.warn('[Storage] Skills 目录未配置，请在设置页面配置 Skills 目录')
+    return settings
+  }
+  
+  // 验证 Skills 目录是否存在
+  if (!fs.existsSync(settings.general.skillsDirectory)) {
+    logger.warn('[Storage] Skills 目录不存在:', settings.general.skillsDirectory)
+    logger.warn('[Storage] 请在设置页面重新配置正确的 Skills 目录')
+  } else {
+    logger.info('[Storage] Skills 目录:', settings.general.skillsDirectory)
+  }
+  
+  return settings
 }
 
 /**
@@ -173,7 +190,7 @@ export function getToolConfig(toolId: string): any {
  * 清除所有缓存（用于调试或强制刷新）
  */
 export function clearCache(): void {
-  console.log('[Storage] 清除所有缓存')
+  logger.info('[Storage] 清除所有缓存')
   appSettingsCache = null
   toolsStateCache = null
   cacheTimestamp.appSettings = 0
@@ -257,18 +274,27 @@ export function updateToolInstallation(toolId: string, installed: boolean, confi
  * 初始化存储（应用启动时调用）
  */
 export function initStorage(): void {
-  console.log('[Storage] 初始化存储系统')
+  logger.info('[Storage] 初始化存储系统')
   ensureDataDir()
   
   // 确保配置文件存在
   if (!fs.existsSync(APP_SETTINGS_FILE)) {
     writeJsonFile(APP_SETTINGS_FILE, DEFAULT_APP_SETTINGS)
+    logger.warn('[Storage] 首次运行，请在设置页面配置 Skills 目录')
   }
   
   if (!fs.existsSync(TOOLS_STATE_FILE)) {
     writeJsonFile(TOOLS_STATE_FILE, DEFAULT_TOOLS_STATE)
   }
   
-  console.log('[Storage] 存储系统初始化完成')
-  console.log('[Storage] 数据目录:', DATA_DIR)
+  logger.info('[Storage] 存储系统初始化完成')
+  logger.info('[Storage] 数据目录:', DATA_DIR)
+  
+  // 记录当前设置
+  const settings = getAppSettings()
+  if (settings.general.skillsDirectory) {
+    logger.info('[Storage] 已配置 Skills 目录:', settings.general.skillsDirectory)
+  } else {
+    logger.warn('[Storage] Skills 目录未配置')
+  }
 }

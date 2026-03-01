@@ -1,9 +1,11 @@
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupSkillsIPC } from './ipc/skills'
 import { registerStorageHandlers } from './ipc/storage'
 import { initStorage } from './storage'
+import { logger } from './logger'
+import * as fs from 'fs'
 import icon from '../../resources/icon.png?asset'
 
 // 扩展 App 类型，添加 isQuitting 属性
@@ -30,7 +32,8 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      devTools: is.dev // 只在开发环境启用 DevTools
     }
   })
 
@@ -48,9 +51,32 @@ function createWindow(): void {
     if (!app.isQuitting) {
       event.preventDefault()
       mainWindow?.hide()
-      console.log('[Window] 窗口已最小化到托盘')
+      logger.info('[Window] 窗口已最小化到托盘')
     }
   })
+
+  // 只在开发环境注册快捷键和自动打开 DevTools
+  if (is.dev) {
+    // 注册快捷键打开 DevTools（F12 和 Ctrl+Shift+I）
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'F12' || 
+          (input.control && input.shift && input.key.toLowerCase() === 'i')) {
+        if (mainWindow) {
+          if (mainWindow.webContents.isDevToolsOpened()) {
+            mainWindow.webContents.closeDevTools()
+            logger.info('[DevTools] 关闭开发者工具')
+          } else {
+            mainWindow.webContents.openDevTools()
+            logger.info('[DevTools] 打开开发者工具')
+          }
+        }
+        event.preventDefault()
+      }
+    })
+
+    // 开发环境自动打开 DevTools
+    mainWindow.webContents.openDevTools()
+  }
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
@@ -73,7 +99,7 @@ function createTray(): void {
   tray.setToolTip('Skills Manager Tool')
   
   // 创建托盘右键菜单
-  const contextMenu = Menu.buildFromTemplate([
+  const menuTemplate: any[] = [
     {
       label: '打开',
       click: () => {
@@ -84,7 +110,30 @@ function createTray(): void {
           createWindow()
         }
       }
-    },
+    }
+  ]
+
+  // 只在开发环境添加开发者工具菜单
+  if (is.dev) {
+    menuTemplate.push({
+      label: '开发者工具',
+      click: () => {
+        if (mainWindow) {
+          if (!mainWindow.isVisible()) {
+            mainWindow.show()
+            mainWindow.focus()
+          }
+          if (mainWindow.webContents.isDevToolsOpened()) {
+            mainWindow.webContents.closeDevTools()
+          } else {
+            mainWindow.webContents.openDevTools()
+          }
+        }
+      }
+    })
+  }
+
+  menuTemplate.push(
     {
       type: 'separator'
     },
@@ -95,7 +144,9 @@ function createTray(): void {
         app.quit()
       }
     }
-  ])
+  )
+
+  const contextMenu = Menu.buildFromTemplate(menuTemplate)
   
   // 设置托盘右键菜单
   tray.setContextMenu(contextMenu)
@@ -110,22 +161,31 @@ function createTray(): void {
     }
   })
   
-  console.log('[Tray] 系统托盘已创建')
+  logger.info('[Tray] 系统托盘已创建')
 }
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  // 记录应用启动
+  logger.info('='.repeat(80))
+  logger.info('应用启动')
+  logger.info(`版本: ${app.getVersion()}`)
+  logger.info(`环境: ${process.env.NODE_ENV || 'production'}`)
+  logger.info(`平台: ${process.platform}`)
+  logger.info(`日志路径: ${logger.getLogPath()}`)
+  logger.info('='.repeat(80))
+  
   // 初始化存储系统
   initStorage()
   
   // 配置 HTTP 代理用于加速 API 请求
-  app.commandLine.appendSwitch('proxy-server', '127.0.0.1:10809')
+  // app.commandLine.appendSwitch('proxy-server', '127.0.0.1:10809')
   // 禁用缓存以避免权限错误
   app.commandLine.appendSwitch('disable-http-cache')
   app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
-  console.log('[Proxy] HTTP proxy configured: 127.0.0.1:10809')
+  // logger.info('[Proxy] HTTP proxy configured: 127.0.0.1:10809')
 
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
@@ -138,7 +198,7 @@ app.whenReady().then(() => {
   })
 
   // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  ipcMain.on('ping', () => logger.debug('pong'))
 
   // Window Controls IPC
   ipcMain.on('window-min', (event) => {
@@ -157,7 +217,7 @@ app.whenReady().then(() => {
     const win = BrowserWindow.fromWebContents(event.sender)
     // 最小化到托盘而不是关闭
     win?.hide()
-    console.log('[Window] 窗口已最小化到托盘')
+    logger.info('[Window] 窗口已最小化到托盘')
   })
 
   // Register skills IPC handler
@@ -165,6 +225,74 @@ app.whenReady().then(() => {
   
   // Register storage IPC handler
   registerStorageHandlers()
+  
+  // Register logger IPC handlers
+  ipcMain.handle('logger:get-log-path', () => {
+    return logger.getLogPath()
+  })
+  
+  ipcMain.handle('logger:get-log-dir', () => {
+    return logger.getLogDir()
+  })
+  
+  ipcMain.handle('logger:clear-logs', () => {
+    logger.clearLogs()
+    return true
+  })
+  
+  ipcMain.handle('logger:read-logs', async () => {
+    try {
+      const logPath = logger.getLogPath()
+      if (fs.existsSync(logPath)) {
+        return fs.readFileSync(logPath, 'utf8')
+      }
+      return ''
+    } catch (error) {
+      logger.error('读取日志文件失败:', error)
+      return ''
+    }
+  })
+  
+  // 打开外部路径
+  ipcMain.on('open-external', (_, path) => {
+    shell.openPath(path)
+  })
+  
+  // 打开/关闭 DevTools
+  ipcMain.handle('devtools:toggle', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) {
+      if (win.webContents.isDevToolsOpened()) {
+        win.webContents.closeDevTools()
+        logger.info('[DevTools] 通过 IPC 关闭开发者工具')
+        return false
+      } else {
+        win.webContents.openDevTools()
+        logger.info('[DevTools] 通过 IPC 打开开发者工具')
+        return true
+      }
+    }
+    return false
+  })
+  
+  // 打开目录选择对话框
+  ipcMain.handle('dialog:openDirectory', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        properties: ['openDirectory', 'createDirectory'],
+        title: '选择 Skills 目录'
+      })
+      
+      if (result.canceled) {
+        return null
+      }
+      
+      return result.filePaths[0]
+    } catch (error) {
+      logger.error('[Dialog] 打开目录对话框失败:', error)
+      return null
+    }
+  })
 
   // 创建系统托盘
   createTray()
@@ -176,6 +304,9 @@ app.whenReady().then(() => {
     // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+}).catch((error) => {
+  logger.error('[App] 应用启动失败:', error)
+  logger.error('[App] Stack:', error.stack)
 })
 
 // Quit when all windows are closed, except on macOS. There, it's common
@@ -183,7 +314,7 @@ app.whenReady().then(() => {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   // 不退出应用，保持托盘运行
-  console.log('[App] 所有窗口已关闭，应用继续在托盘运行')
+  logger.info('[App] 所有窗口已关闭，应用继续在托盘运行')
 })
 
 // 在应用退出前清理托盘
@@ -192,7 +323,22 @@ app.on('before-quit', () => {
   if (tray) {
     tray.destroy()
     tray = null
-    console.log('[Tray] 系统托盘已销毁')
+    logger.info('[Tray] 系统托盘已销毁')
+  }
+  logger.info('应用退出')
+})
+
+// 捕获未处理的异常
+process.on('uncaughtException', (error) => {
+  logger.error('[UncaughtException]', error)
+  logger.error('[UncaughtException] Stack:', error.stack)
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('[UnhandledRejection] Reason:', reason)
+  logger.error('[UnhandledRejection] Promise:', promise)
+  if (reason instanceof Error) {
+    logger.error('[UnhandledRejection] Stack:', reason.stack)
   }
 })
 

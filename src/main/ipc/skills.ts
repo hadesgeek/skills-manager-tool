@@ -3,6 +3,7 @@ import { join, basename } from 'path'
 import * as fs from 'fs'
 import { app } from 'electron'
 import { getToolConfig as getStorageToolConfig, getAppSettings } from '../storage/index.js'
+import { logger } from '../logger'
 
 /**
  * 获取图标存储目录
@@ -13,7 +14,7 @@ function getIconsDir(): string {
     // 确保目录存在
     if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true })
-        console.log('[GetIconsDir] 创建图标目录:', dataDir)
+        logger.info('[GetIconsDir] 创建图标目录:', dataDir)
     }
     
     return dataDir
@@ -41,7 +42,7 @@ function readIconMapping(): Record<string, string> {
         const content = fs.readFileSync(mappingPath, 'utf8')
         return JSON.parse(content)
     } catch (error) {
-        console.error('[ReadIconMapping] 读取图标映射失败:', error)
+        logger.error('[ReadIconMapping] 读取图标映射失败:', error)
         return {}
     }
 }
@@ -54,9 +55,9 @@ function saveIconMapping(mapping: Record<string, string>): void {
     
     try {
         fs.writeFileSync(mappingPath, JSON.stringify(mapping, null, 2), 'utf8')
-        console.log('[SaveIconMapping] 图标映射已保存')
+        logger.info('[SaveIconMapping] 图标映射已保存')
     } catch (error) {
-        console.error('[SaveIconMapping] 保存图标映射失败:', error)
+        logger.error('[SaveIconMapping] 保存图标映射失败:', error)
     }
 }
 
@@ -74,7 +75,7 @@ function getSkillIconPath(skillName: string): string | undefined {
     const iconPath = join(getIconsDir(), iconFileName)
     
     if (!fs.existsSync(iconPath)) {
-        console.warn(`[GetSkillIconPath] 图标文件不存在: ${iconPath}`)
+        logger.warn(`[GetSkillIconPath] 图标文件不存在: ${iconPath}`)
         return undefined
     }
     
@@ -97,7 +98,7 @@ function saveSkillIcon(skillName: string, imageData: string): string {
     const buffer = Buffer.from(base64Data, 'base64')
     fs.writeFileSync(iconPath, buffer)
     
-    console.log(`[SaveSkillIcon] 图标已保存: ${iconPath}`)
+    logger.info(`[SaveSkillIcon] 图标已保存: ${iconPath}`)
     
     // 更新映射
     const mapping = readIconMapping()
@@ -107,7 +108,7 @@ function saveSkillIcon(skillName: string, imageData: string): string {
         const oldIconPath = join(iconsDir, mapping[skillName])
         if (fs.existsSync(oldIconPath)) {
             fs.unlinkSync(oldIconPath)
-            console.log(`[SaveSkillIcon] 删除旧图标: ${oldIconPath}`)
+            logger.info(`[SaveSkillIcon] 删除旧图标: ${oldIconPath}`)
         }
     }
     
@@ -136,12 +137,31 @@ export interface Skill {
 export function setupSkillsIPC(): void {
     // 获取技能列表的 IPC 处理器
     ipcMain.handle('skills:getSkills', async (_, dirPath: string, apiKey?: string) => {
-        return await readSkills(dirPath, apiKey)
+        logger.info('[IPC:getSkills] 收到请求, dirPath:', dirPath, 'apiKey:', apiKey ? 'YES' : 'NO')
+        try {
+            const result = await readSkills(dirPath, apiKey)
+            logger.info('[IPC:getSkills] 返回结果, count:', result?.length || 0)
+            return result
+        } catch (error) {
+            logger.error('[IPC:getSkills] 处理失败:', error)
+            throw error
+        }
     })
     
     // 获取技能列表（快速版本，不等待翻译）
     ipcMain.handle('skills:getSkillsFast', async (_, dirPath: string) => {
-        return await readSkillsFast(dirPath)
+        logger.info('[IPC:getSkillsFast] 收到请求, dirPath:', dirPath)
+        try {
+            const result = await readSkillsFast(dirPath)
+            logger.info('[IPC:getSkillsFast] 返回结果, count:', result?.length || 0)
+            // if (result && result.length > 0) {
+            //     logger.info('[IPC:getSkillsFast] 第一个 skill 示例:', result[0])
+            // }
+            return result
+        } catch (error) {
+            logger.error('[IPC:getSkillsFast] 处理失败:', error)
+            throw error
+        }
     })
     
     // 翻译单个技能描述
@@ -175,23 +195,9 @@ export function setupSkillsIPC(): void {
             await fs.promises.writeFile(filePath, content, 'utf8')
             return true
         } catch (err) {
-            console.error('[WriteFile] 写入文件失败:', err)
+            logger.error('[WriteFile] 写入文件失败:', err)
             throw err
         }
-    })
-    
-    // 打开目录选择对话框
-    ipcMain.handle('dialog:openDirectory', async () => {
-        const { dialog, BrowserWindow } = require('electron')
-        const result = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow()!, {
-            properties: ['openDirectory']
-        })
-        
-        if (result.canceled) {
-            return null
-        }
-        
-        return result.filePaths[0]
     })
 
     // 翻译文件并保存的 IPC 处理器
@@ -235,14 +241,21 @@ export function setupSkillsIPC(): void {
  * 立即返回基本信息，翻译和图标生成由前端异步调用
  */
 async function readSkillsFast(dirPath: string): Promise<Skill[]> {
-    console.log(`[ReadSkillsFast] Starting with dirPath: ${dirPath}`)
+    logger.info(`[ReadSkillsFast] 开始读取, dirPath: ${dirPath}`)
     
     try {
         // 检查目录是否存在
-        if (!fs.existsSync(dirPath)) {
-            console.log(`[ReadSkillsFast] Directory not found: ${dirPath}`)
+        if (!dirPath) {
+            logger.warn('[ReadSkillsFast] dirPath 为空')
             return []
         }
+        
+        if (!fs.existsSync(dirPath)) {
+            logger.warn(`[ReadSkillsFast] 目录不存在: ${dirPath}`)
+            return []
+        }
+        
+        logger.info('[ReadSkillsFast] 目录存在，开始读取...')
 
         // 读取目录下的所有项目
         const items = await fs.promises.readdir(dirPath, { withFileTypes: true })
@@ -276,12 +289,12 @@ async function readSkillsFast(dirPath: string): Promise<Skill[]> {
                     // 检查是否有缓存的翻译
                     if (fs.existsSync(descCachePath)) {
                         desc = (await fs.promises.readFile(descCachePath, 'utf8')).trim()
-                        console.log(`[ReadSkillsFast] ${item.name} - 使用缓存的描述`)
+                        logger.info(`[ReadSkillsFast] ${item.name} - 使用缓存的描述`)
                         needsTranslation = false
                     } else {
                         // 使用原始描述
                         desc = extractDescription(mdContent)
-                        console.log(`[ReadSkillsFast] ${item.name} - 使用原始描述，需要翻译`)
+                        logger.info(`[ReadSkillsFast] ${item.name} - 使用原始描述，需要翻译`)
                         needsTranslation = true  // 没有缓存，需要翻译
                     }
                     
@@ -292,7 +305,7 @@ async function readSkillsFast(dirPath: string): Promise<Skill[]> {
                         const imageBuffer = fs.readFileSync(iconPath)
                         const base64Image = imageBuffer.toString('base64')
                         icon = `data:image/png;base64,${base64Image}`
-                        console.log(`[ReadSkillsFast] ${item.name} - 使用缓存的图标`)
+                        logger.info(`[ReadSkillsFast] ${item.name} - 使用缓存的图标`)
                     }
 
                     // 添加技能到列表
@@ -310,7 +323,7 @@ async function readSkillsFast(dirPath: string): Promise<Skill[]> {
 
         return skills
     } catch (error) {
-        console.error('[ReadSkillsFast] Error reading skills directory:', error)
+        logger.error('[ReadSkillsFast] Error reading skills directory:', error)
         return []
     }
 }
@@ -324,7 +337,7 @@ async function translateSkillDesc(skillPath: string, apiKey: string): Promise<{ 
     const label = `[TranslateSkillDesc] ${skillName}`
     
     try {
-        console.log(`${label} - 开始翻译描述`)
+        logger.info(`${label} - 开始翻译描述`)
         
         // 读取 SKILL.MD
         const skillMdPath = join(skillPath, 'SKILL.MD')
@@ -334,50 +347,50 @@ async function translateSkillDesc(skillPath: string, apiKey: string): Promise<{ 
         // 如果已有缓存，直接返回
         if (fs.existsSync(descCachePath)) {
             const desc = (await fs.promises.readFile(descCachePath, 'utf8')).trim()
-            console.log(`${label} - 使用缓存的翻译`)
+            logger.info(`${label} - 使用缓存的翻译`)
             return { desc }
         }
         
-        console.log(`${label} - 读取 Skill 文件...`)
+        logger.info(`${label} - 读取 Skill 文件...`)
         let mdContent = ''
         if (fs.existsSync(skillMdPath)) {
             mdContent = await fs.promises.readFile(skillMdPath, 'utf8')
-            console.log(`${label} - 读取 SKILL.MD，大小: ${mdContent.length} 字符`)
+            logger.info(`${label} - 读取 SKILL.MD，大小: ${mdContent.length} 字符`)
         } else if (fs.existsSync(skillMdPathLower)) {
             mdContent = await fs.promises.readFile(skillMdPathLower, 'utf8')
-            console.log(`${label} - 读取 skill.md，大小: ${mdContent.length} 字符`)
+            logger.info(`${label} - 读取 skill.md，大小: ${mdContent.length} 字符`)
         }
         
         if (!mdContent) {
-            console.error(`${label} - Skill MD 文件未找到`)
+            logger.error(`${label} - Skill MD 文件未找到`)
             throw new Error('Skill MD file not found')
         }
         
         // 提取原始描述
         const rawDesc = extractDescription(mdContent)
-        console.log(`${label} - 原始描述: ${rawDesc}`)
+        logger.info(`${label} - 原始描述: ${rawDesc}`)
         
         // 翻译描述
-        console.log(`${label} - 调用翻译 API...`)
+        logger.info(`${label} - 调用翻译 API...`)
         const translateStartTime = Date.now()
         const desc = await translateDescription(rawDesc, apiKey)
         const translateTime = Date.now() - translateStartTime
         
-        console.log(`${label} - 翻译完成，耗时: ${translateTime}ms`)
-        console.log(`${label} - 翻译结果: ${desc}`)
+        logger.info(`${label} - 翻译完成，耗时: ${translateTime}ms`)
+        logger.info(`${label} - 翻译结果: ${desc}`)
         
         // 保存到缓存
         await fs.promises.writeFile(descCachePath, desc, 'utf8')
-        console.log(`${label} - 翻译已保存到缓存`)
+        logger.info(`${label} - 翻译已保存到缓存`)
         
         const totalTime = Date.now() - startTime
-        console.log(`${label} - ✓ 翻译完成！总耗时: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`)
+        logger.info(`${label} - ✓ 翻译完成！总耗时: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`)
         
         return { desc }
     } catch (error) {
         const totalTime = Date.now() - startTime
-        console.error(`${label} - ✗ 翻译失败，耗时: ${totalTime}ms`)
-        console.error(`${label} - 错误详情:`, error)
+        logger.error(`${label} - ✗ 翻译失败，耗时: ${totalTime}ms`)
+        logger.error(`${label} - 错误详情:`, error)
         throw error
     }
 }
@@ -389,14 +402,14 @@ async function translateSkillDesc(skillPath: string, apiKey: string): Promise<{ 
 async function generateSkillIcon(skillName: string, skillDesc: string, apiKey: string): Promise<{ icon: string }> {
     const startTime = Date.now()
     const label = `[GenerateSkillIcon] ${skillName}`
-    console.log(`[generateSkillIcon] API Key provided: ${apiKey ? 'YES (length: ' + apiKey.length + ')' : 'NO'}`)
+    logger.info(`[generateSkillIcon] API Key provided: ${apiKey ? 'YES (length: ' + apiKey.length + ')' : 'NO'}`)
     try {
-        console.log(`${label} - 开始生成图标`)
-        console.log(`${label} - 描述: ${skillDesc}`)
+        logger.info(`${label} - 开始生成图标`)
+        logger.info(`${label} - 描述: ${skillDesc}`)
         
         // 构建提示词（修改为 50x50）
         const prompt = `A simple, clean, minimalist icon for a coding skill: ${skillName}. ${skillDesc}. Flat design, professional, vibrant colors, 50x50 pixels, icon only, no text.`
-        console.log(`${label} - 提示词: ${prompt}`)
+        logger.info(`${label} - 提示词: ${prompt}`)
         
         // 构建 Gemini Nano Banana API 请求 URL
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`
@@ -413,7 +426,7 @@ async function generateSkillIcon(skillName: string, skillDesc: string, apiKey: s
             }
         }
         
-        console.log(`${label} - 发送请求到 Nano Banana API...`)
+        logger.info(`${label} - 发送请求到 Nano Banana API...`)
         const requestStartTime = Date.now()
         
         const response = await fetch(url, {
@@ -425,21 +438,21 @@ async function generateSkillIcon(skillName: string, skillDesc: string, apiKey: s
         })
         
         const requestTime = Date.now() - requestStartTime
-        console.log(`${label} - 收到响应，耗时: ${requestTime}ms`)
-        console.log(`${label} - 响应状态: ${response.status} ${response.statusText}`)
+        logger.info(`${label} - 收到响应，耗时: ${requestTime}ms`)
+        logger.info(`${label} - 响应状态: ${response.status} ${response.statusText}`)
         
         if (!response.ok) {
             const errorText = await response.text()
-            console.error(`${label} - API 错误: ${response.status}`, errorText)
+            logger.error(`${label} - API 错误: ${response.status}`, errorText)
             throw new Error(`Gemini Nano Banana API error: ${response.statusText}`)
         }
         
-        console.log(`${label} - 解析响应数据...`)
+        logger.info(`${label} - 解析响应数据...`)
         const data = await response.json()
         
         // 提取图像数据
         const parts = data?.candidates?.[0]?.content?.parts || []
-        console.log(`${label} - 响应包含 ${parts.length} 个部分`)
+        logger.info(`${label} - 响应包含 ${parts.length} 个部分`)
         
         for (let i = 0; i < parts.length; i++) {
             const part = parts[i]
@@ -447,32 +460,32 @@ async function generateSkillIcon(skillName: string, skillDesc: string, apiKey: s
                 const imageData = part.inlineData.data
                 const mimeType = part.inlineData.mimeType
                 
-                console.log(`${label} - 找到图像数据 (部分 ${i + 1})`)
-                console.log(`${label} - MIME 类型: ${mimeType}`)
-                console.log(`${label} - 数据大小: ${imageData.length} 字符 (约 ${Math.round(imageData.length * 0.75 / 1024)} KB)`)
+                logger.info(`${label} - 找到图像数据 (部分 ${i + 1})`)
+                logger.info(`${label} - MIME 类型: ${mimeType}`)
+                logger.info(`${label} - 数据大小: ${imageData.length} 字符 (约 ${Math.round(imageData.length * 0.75 / 1024)} KB)`)
                 
                 // 转换为 data URL
                 const dataUrl = `data:${mimeType};base64,${imageData}`
                 
                 // 保存图标到文件系统
-                console.log(`${label} - 保存图标到文件系统...`)
+                logger.info(`${label} - 保存图标到文件系统...`)
                 saveSkillIcon(skillName, dataUrl)
                 
                 const totalTime = Date.now() - startTime
-                console.log(`${label} - ✓ 图标生成成功！总耗时: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`)
+                logger.info(`${label} - ✓ 图标生成成功！总耗时: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`)
                 
                 // 返回 data URL（而不是 file:// URL）
                 return { icon: dataUrl }
             }
         }
         
-        console.error(`${label} - 响应中未找到图像数据`)
-        console.error(`${label} - 响应结构:`, JSON.stringify(data, null, 2))
+        logger.error(`${label} - 响应中未找到图像数据`)
+        logger.error(`${label} - 响应结构:`, JSON.stringify(data, null, 2))
         throw new Error('No image data in response')
     } catch (error) {
         const totalTime = Date.now() - startTime
-        console.error(`${label} - ✗ 生成图标失败，耗时: ${totalTime}ms`)
-        console.error(`${label} - 错误详情:`, error)
+        logger.error(`${label} - ✗ 生成图标失败，耗时: ${totalTime}ms`)
+        logger.error(`${label} - 错误详情:`, error)
         throw error
     }
 }
@@ -485,13 +498,13 @@ async function generateSkillIcon(skillName: string, skillDesc: string, apiKey: s
  */
 
 async function readSkills(dirPath: string, apiKey?: string): Promise<Skill[]> {
-    console.log(`[ReadSkills] Starting with dirPath: ${dirPath}`)
-    console.log(`[ReadSkills] API Key provided: ${apiKey ? 'YES (length: ' + apiKey.length + ')' : 'NO'}`)
+    logger.info(`[ReadSkills] Starting with dirPath: ${dirPath}`)
+    logger.info(`[ReadSkills] API Key provided: ${apiKey ? 'YES (length: ' + apiKey.length + ')' : 'NO'}`)
     
     try {
         // 检查目录是否存在
         if (!fs.existsSync(dirPath)) {
-            console.log(`[ReadSkills] Directory not found: ${dirPath}`)
+            logger.info(`[ReadSkills] Directory not found: ${dirPath}`)
             return []
         }
 
@@ -525,26 +538,26 @@ async function readSkills(dirPath: string, apiKey?: string): Promise<Skill[]> {
                     // 优先级 1: 从缓存的翻译文件中读取
                     if (fs.existsSync(descCachePath)) {
                         desc = (await fs.promises.readFile(descCachePath, 'utf8')).trim()
-                        console.log(`[ReadSkills] ${item.name} - 使用缓存的描述`)
+                        logger.info(`[ReadSkills] ${item.name} - 使用缓存的描述`)
                     } else {
                         // 从 Markdown 内容中提取原始描述
                         const rawDesc = extractDescription(mdContent)
-                        console.log(`[ReadSkills] ${item.name} - 已提取描述`)
+                        logger.info(`[ReadSkills] ${item.name} - 已提取描述`)
                         // 如果提供了 API Key，则翻译描述并缓存
                         if (apiKey) {
-                            console.log(`[ReadSkills] ${item.name} - 提供了 API Key，正在翻译...`)
+                            logger.info(`[ReadSkills] ${item.name} - 提供了 API Key，正在翻译...`)
                             try {
                                 desc = await translateDescription(rawDesc, apiKey)
                                 // 将翻译结果保存到缓存文件
                                 await fs.promises.writeFile(descCachePath, desc, 'utf8')
-                                console.log(`[ReadSkills] ${item.name} - 翻译已缓存`)
+                                logger.info(`[ReadSkills] ${item.name} - 翻译已缓存`)
                             } catch (err) {
-                                console.error('翻译描述失败:', item.name, err)
+                                logger.error('翻译描述失败:', item.name, err)
                                 // 翻译失败时使用原始描述
                                 desc = rawDesc
                             }
                         } else {
-                            console.log(`[ReadSkills] ${item.name} - 无 API Key，使用原始描述`)
+                            logger.info(`[ReadSkills] ${item.name} - 无 API Key，使用原始描述`)
                             // 没有 API Key 时直接使用原始描述
                             desc = rawDesc
                         }
@@ -563,7 +576,7 @@ async function readSkills(dirPath: string, apiKey?: string): Promise<Skill[]> {
 
         return skills
     } catch (error) {
-        console.error('Error reading skills directory:', error)
+        logger.error('Error reading skills directory:', error)
         return []
     }
 }
@@ -636,8 +649,8 @@ async function translateDescription(rawDesc: string, apiKey: string): Promise<st
     // 创建性能计时标签
     const label = `[Gemini-Desc] ${Date.now()}`
     console.time(label)
-    console.log(`${label} - Start translating`)
-    console.log(`${label} - Original: ${rawDesc}`)
+    logger.info(`${label} - Start translating`)
+    logger.info(`${label} - Original: ${rawDesc}`)
     
     try {
         // 配置请求选项，明确指定 UTF-8 编码
@@ -650,23 +663,23 @@ async function translateDescription(rawDesc: string, apiKey: string): Promise<st
             body: JSON.stringify(body)
         }
         
-        console.log(`${label} - Request URL: ${url.substring(0, 80)}...`)
-        console.log(`${label} - Proxy should be: 127.0.0.1:10809 (configured in main process)`)
-        console.log(`${label} - Sending request...`)
+        logger.info(`${label} - Request URL: ${url.substring(0, 80)}...`)
+        logger.info(`${label} - Proxy should be: 127.0.0.1:10809 (configured in main process)`)
+        logger.info(`${label} - Sending request...`)
         
         // 发送 POST 请求到 Gemini API（代理已在主进程配置）
         const startTime = Date.now()
         const response = await fetch(url, fetchOptions)
         const requestTime = Date.now() - startTime
         
-        console.log(`${label} - Response received in ${requestTime}ms`)
-        console.log(`${label} - Response status: ${response.status} ${response.statusText}`)
+        logger.info(`${label} - Response received in ${requestTime}ms`)
+        logger.info(`${label} - Response status: ${response.status} ${response.statusText}`)
         
         // 检查响应状态
         if (!response.ok) {
             const errorText = await response.text()
-            console.error(`${label} - API Error: ${response.status} ${response.statusText}`)
-            console.error(`${label} - Error details: ${errorText}`)
+            logger.error(`${label} - API Error: ${response.status} ${response.statusText}`)
+            logger.error(`${label} - Error details: ${errorText}`)
             throw new Error(`Gemini API error: ${response.statusText}`)
         }
         
@@ -676,16 +689,16 @@ async function translateDescription(rawDesc: string, apiKey: string): Promise<st
         // 提取翻译文本
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
         if (!text) {
-            console.error(`${label} - Empty response from API`)
-            console.error(`${label} - Response data:`, JSON.stringify(data, null, 2))
+            logger.error(`${label} - Empty response from API`)
+            logger.error(`${label} - Response data:`, JSON.stringify(data, null, 2))
             throw new Error('Empty response from Gemini API')
         }
         
         const result = text.trim()
-        console.log(`${label} - Translated: ${result}`)
+        logger.info(`${label} - Translated: ${result}`)
         return result
     } catch (error) {
-        console.error(`${label} - Translation failed:`, error)
+        logger.error(`${label} - Translation failed:`, error)
         throw error
     } finally {
         // 结束计时
@@ -778,9 +791,9 @@ async function translateAndSave(filePath: string, apiKey: string): Promise<strin
     // 创建性能计时标签
     const label = `[Gemini-File] ${basename(filePath)}`
     console.time(label)
-    console.log(`${label} - Start translating`)
-    console.log(`${label} - File: ${filePath}`)
-    console.log(`${label} - Size: ${originalContent.length} chars`)
+    logger.info(`${label} - Start translating`)
+    logger.info(`${label} - File: ${filePath}`)
+    logger.info(`${label} - Size: ${originalContent.length} chars`)
     
     try {
         // 配置请求选项，明确指定 UTF-8 编码
@@ -793,23 +806,23 @@ async function translateAndSave(filePath: string, apiKey: string): Promise<strin
             body: JSON.stringify(body)
         }
         
-        console.log(`${label} - Request URL: ${url.substring(0, 80)}...`)
-        console.log(`${label} - Proxy should be: 127.0.0.1:10809 (configured in main process)`)
-        console.log(`${label} - Sending request...`)
+        logger.info(`${label} - Request URL: ${url.substring(0, 80)}...`)
+        logger.info(`${label} - Proxy should be: 127.0.0.1:10809 (configured in main process)`)
+        logger.info(`${label} - Sending request...`)
         
         // 发送 POST 请求到 Gemini API（代理已在主进程配置）
         const startTime = Date.now()
         const response = await fetch(url, fetchOptions)
         const requestTime = Date.now() - startTime
         
-        console.log(`${label} - Response received in ${requestTime}ms`)
-        console.log(`${label} - Response status: ${response.status} ${response.statusText}`)
+        logger.info(`${label} - Response received in ${requestTime}ms`)
+        logger.info(`${label} - Response status: ${response.status} ${response.statusText}`)
 
         // 检查响应状态
         if (!response.ok) {
             const errorText = await response.text()
-            console.error(`${label} - API Error: ${response.status} ${response.statusText}`)
-            console.error(`${label} - Error details: ${errorText}`)
+            logger.error(`${label} - API Error: ${response.status} ${response.statusText}`)
+            logger.error(`${label} - Error details: ${errorText}`)
             throw new Error(`Gemini API error: ${response.statusText}`)
         }
 
@@ -818,11 +831,11 @@ async function translateAndSave(filePath: string, apiKey: string): Promise<strin
         const translatedContent = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
 
         if (!translatedContent) {
-            console.error(`${label} - Empty response from API`)
+            logger.error(`${label} - Empty response from API`)
             throw new Error('Empty response from Gemini API')
         }
 
-        console.log(`${label} - Translation completed: ${translatedContent.length} chars`)
+        logger.info(`${label} - Translation completed: ${translatedContent.length} chars`)
 
         // 移除 Gemini 可能添加的代码围栏包装（```markdown ... ```）
         const cleaned = translatedContent
@@ -838,11 +851,11 @@ async function translateAndSave(filePath: string, apiKey: string): Promise<strin
 
         // 保存翻译结果到 _cn.md 文件（使用 UTF-8 without BOM）
         await fs.promises.writeFile(cnPath, cleaned, { encoding: 'utf8' })
-        console.log(`${label} - 已保存到: ${cnPath}`)
+        logger.info(`${label} - 已保存到: ${cnPath}`)
 
         return cleaned
     } catch (error) {
-        console.error(`${label} - Translation failed:`, error)
+        logger.error(`${label} - Translation failed:`, error)
         throw error
     } finally {
         // 结束计时
@@ -871,7 +884,7 @@ async function checkToolsInstallation(
 ): Promise<ToolInstallationStatus[]> {
     // 获取用户主目录
     const homeDir = process.env.HOME || process.env.USERPROFILE || ''
-    console.log(`[CheckTools] Home directory: ${homeDir}`)
+    logger.info(`[CheckTools] Home directory: ${homeDir}`)
     
     const results: ToolInstallationStatus[] = []
     
@@ -886,7 +899,7 @@ async function checkToolsInstallation(
         // 检查配置目录是否存在
         const installed = fs.existsSync(configPath)
         
-        console.log(`[CheckTools] ${tool.name} (${tool.dirName}): ${installed ? '已检测到' : '未检测到'}`)
+        logger.info(`[CheckTools] ${tool.name} (${tool.dirName}): ${installed ? '已检测到' : '未检测到'}`)
         
         results.push({
             id,
@@ -924,19 +937,19 @@ function getSkillsManagerDir(): string {
         const skillsDir = appSettings?.general?.skillsDirectory || ''
         
         if (!skillsDir) {
-            console.error(`[GetSkillsManagerDir] 应用设置中未配置 skillsDirectory`)
+            logger.error(`[GetSkillsManagerDir] 应用设置中未配置 skillsDirectory`)
             return ''
         }
         
         if (!fs.existsSync(skillsDir)) {
-            console.error(`[GetSkillsManagerDir] Skills 目录不存在: ${skillsDir}`)
+            logger.error(`[GetSkillsManagerDir] Skills 目录不存在: ${skillsDir}`)
             return ''
         }
         
-        console.log(`[GetSkillsManagerDir] Skills 目录: ${skillsDir}`)
+        logger.info(`[GetSkillsManagerDir] Skills 目录: ${skillsDir}`)
         return skillsDir
     } catch (error) {
-        console.error(`[GetSkillsManagerDir] 读取 Skills 目录失败:`, error)
+        logger.error(`[GetSkillsManagerDir] 读取 Skills 目录失败:`, error)
         return ''
     }
 }
@@ -967,7 +980,7 @@ async function getToolConfig(toolId: string): Promise<any> {
         const content = await fs.promises.readFile(configPath, 'utf8')
         return JSON.parse(content)
     } catch (error) {
-        console.error(`[GetToolConfig] 读取配置失败: ${toolId}`, error)
+        logger.error(`[GetToolConfig] 读取配置失败: ${toolId}`, error)
         return {
             enabled: false,
             skills: {}
@@ -983,10 +996,10 @@ async function saveToolConfig(toolId: string, config: any): Promise<boolean> {
     
     try {
         await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8')
-        console.log(`[SaveToolConfig] 配置已保存: ${toolId}`)
+        logger.info(`[SaveToolConfig] 配置已保存: ${toolId}`)
         return true
     } catch (error) {
-        console.error(`[SaveToolConfig] 保存配置失败: ${toolId}`, error)
+        logger.error(`[SaveToolConfig] 保存配置失败: ${toolId}`, error)
         return false
     }
 }
@@ -997,7 +1010,7 @@ async function saveToolConfig(toolId: string, config: any): Promise<boolean> {
  */
 async function getToolSkills(toolId: string, skillsPath: string): Promise<Array<{name: string, desc: string, active: boolean}>> {
     if (!skillsPath || !fs.existsSync(skillsPath)) {
-        console.log(`[GetToolSkills] Skills 路径未找到: ${skillsPath}`)
+        logger.info(`[GetToolSkills] Skills 路径未找到: ${skillsPath}`)
         return []
     }
     
@@ -1007,8 +1020,8 @@ async function getToolSkills(toolId: string, skillsPath: string): Promise<Array<
     // 使用 readSkills 函数读取所有 Skills（不需要 API Key，因为不翻译）
     const allSkills = await readSkills(skillsPath)
     
-    console.log(`[GetToolSkills] readSkills 返回了 ${allSkills.length} 个 skills`)
-    console.log(`[GetToolSkills] 第一个 skill:`, allSkills[0])
+    logger.info(`[GetToolSkills] readSkills 返回了 ${allSkills.length} 个 skills`)
+    logger.info(`[GetToolSkills] 第一个 skill:`, allSkills[0])
     
     // 转换为工具 Skills 格式，标记哪些已启用
     const toolSkills = allSkills.map(skill => ({
@@ -1017,8 +1030,8 @@ async function getToolSkills(toolId: string, skillsPath: string): Promise<Array<
         active: config.skills[skill.name] || false
     }))
     
-    console.log(`[GetToolSkills] ${toolId} 的 Skills 数量: ${toolSkills.length}`)
-    console.log(`[GetToolSkills] 第一个转换后的 skill:`, toolSkills[0])
+    logger.info(`[GetToolSkills] ${toolId} 的 Skills 数量: ${toolSkills.length}`)
+    logger.info(`[GetToolSkills] 第一个转换后的 skill:`, toolSkills[0])
     return toolSkills
 }
 
@@ -1034,10 +1047,10 @@ function getToolSkillsPath(toolId: string): string {
             return toolConfig.skillsPath
         }
         
-        console.error(`[GetToolSkillsPath] 工具 ${toolId} 的 skillsPath 未找到`)
+        logger.error(`[GetToolSkillsPath] 工具 ${toolId} 的 skillsPath 未找到`)
         return ''
     } catch (error) {
-        console.error(`[GetToolSkillsPath] 读取配置失败:`, error)
+        logger.error(`[GetToolSkillsPath] 读取配置失败:`, error)
         return ''
     }
 }
@@ -1049,7 +1062,7 @@ async function toggleSkill(toolId: string, skillName: string, enabled: boolean):
     const skillsManagerDir = getSkillsManagerDir()
     
     if (!skillsManagerDir) {
-        console.error(`[ToggleSkill] Skills 管理目录不存在`)
+        logger.error(`[ToggleSkill] Skills 管理目录不存在`)
         return false
     }
     
@@ -1057,7 +1070,7 @@ async function toggleSkill(toolId: string, skillName: string, enabled: boolean):
     const toolSkillsDir = getToolSkillsPath(toolId)
     
     if (!toolSkillsDir) {
-        console.error(`[ToggleSkill] 工具 ${toolId} 的 skillsPath 未找到`)
+        logger.error(`[ToggleSkill] 工具 ${toolId} 的 skillsPath 未找到`)
         return false
     }
     
@@ -1067,13 +1080,13 @@ async function toggleSkill(toolId: string, skillName: string, enabled: boolean):
     try {
         if (enabled) {
             // 启用：拷贝 skill 目录到工具的 skills 目录
-            console.log(`[ToggleSkill] 启用 ${skillName} for ${toolId}`)
-            console.log(`[ToggleSkill] 源目录: ${sourceSkillDir}`)
-            console.log(`[ToggleSkill] 目标目录: ${targetSkillDir}`)
+            logger.info(`[ToggleSkill] 启用 ${skillName} for ${toolId}`)
+            logger.info(`[ToggleSkill] 源目录: ${sourceSkillDir}`)
+            logger.info(`[ToggleSkill] 目标目录: ${targetSkillDir}`)
             
             // 确保源目录存在
             if (!fs.existsSync(sourceSkillDir)) {
-                console.error(`[ToggleSkill] 源 Skill 目录不存在: ${sourceSkillDir}`)
+                logger.error(`[ToggleSkill] 源 Skill 目录不存在: ${sourceSkillDir}`)
                 return false
             }
             
@@ -1084,15 +1097,15 @@ async function toggleSkill(toolId: string, skillName: string, enabled: boolean):
             
             // 拷贝目录
             await copyDirectory(sourceSkillDir, targetSkillDir)
-            console.log(`[ToggleSkill] 拷贝成功`)
+            logger.info(`[ToggleSkill] 拷贝成功`)
         } else {
             // 禁用：删除工具 skills 目录下的 skill
-            console.log(`[ToggleSkill] 禁用 ${skillName} for ${toolId}`)
-            console.log(`[ToggleSkill] 删除目录: ${targetSkillDir}`)
+            logger.info(`[ToggleSkill] 禁用 ${skillName} for ${toolId}`)
+            logger.info(`[ToggleSkill] 删除目录: ${targetSkillDir}`)
             
             if (fs.existsSync(targetSkillDir)) {
                 await fs.promises.rm(targetSkillDir, { recursive: true, force: true })
-                console.log(`[ToggleSkill] 删除成功`)
+                logger.info(`[ToggleSkill] 删除成功`)
             }
         }
         
@@ -1103,7 +1116,7 @@ async function toggleSkill(toolId: string, skillName: string, enabled: boolean):
         
         return true
     } catch (error) {
-        console.error(`[ToggleSkill] 操作失败:`, error)
+        logger.error(`[ToggleSkill] 操作失败:`, error)
         return false
     }
 }
@@ -1141,7 +1154,7 @@ async function toggleTool(toolId: string, enabled: boolean): Promise<boolean> {
         
         if (enabled) {
             // 开启工具：将所有已启用的 skills 拷贝过去
-            console.log(`[ToggleTool] 开启工具: ${toolId}`)
+            logger.info(`[ToggleTool] 开启工具: ${toolId}`)
             
             for (const [skillName, skillEnabled] of Object.entries(config.skills)) {
                 if (skillEnabled) {
@@ -1150,7 +1163,7 @@ async function toggleTool(toolId: string, enabled: boolean): Promise<boolean> {
             }
         } else {
             // 关闭工具：删除所有 skills
-            console.log(`[ToggleTool] 关闭工具: ${toolId}`)
+            logger.info(`[ToggleTool] 关闭工具: ${toolId}`)
             
             for (const skillName of Object.keys(config.skills)) {
                 await toggleSkill(toolId, skillName, false)
@@ -1163,7 +1176,7 @@ async function toggleTool(toolId: string, enabled: boolean): Promise<boolean> {
         
         return true
     } catch (error) {
-        console.error(`[ToggleTool] 操作失败:`, error)
+        logger.error(`[ToggleTool] 操作失败:`, error)
         return false
     }
 }

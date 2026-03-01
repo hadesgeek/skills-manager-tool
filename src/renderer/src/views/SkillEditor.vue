@@ -82,6 +82,7 @@ import { python } from '@codemirror/lang-python'
 import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
 import { oneDark } from '@codemirror/theme-one-dark'
+import { logger } from '../utils/logger'
 
 const route = useRoute()
 
@@ -255,67 +256,173 @@ function destroyVditors() {
 
 // 使用纯预览模式渲染（不使用编辑器）
 function renderPreviewOnly(el: HTMLDivElement, content: string) {
-  el.innerHTML = ''
-  
-  // 移除 YAML frontmatter
-  const cleanContent = content.replace(/^---\s*\n[\s\S]*?\n---\s*\n/, '')
-  
-  // 创建预览容器
-  const previewContainer = document.createElement('div')
-  previewContainer.className = 'vditor-preview-container'
-  el.appendChild(previewContainer)
-  
-  // 使用 Vditor.preview 静态方法渲染
-  // @ts-ignore
-  Vditor.preview(previewContainer, cleanContent, {
-    cdn: '/vditor',
-    hljs: { style: 'github', lineNumber: true },
-    mode: 'light'
+  logger.info('[SkillEditor] 开始渲染预览', {
+    contentLength: content.length,
+    contentPreview: content.substring(0, 100)
   })
+  
+  try {
+    el.innerHTML = ''
+    
+    // 处理 YAML frontmatter：将其转换为代码块而不是删除
+    let processedContent = content
+    const yamlMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/)
+    if (yamlMatch) {
+      const yamlContent = yamlMatch[1]
+      const restContent = content.substring(yamlMatch[0].length)
+      
+      // 将 YAML frontmatter 转换为 YAML 代码块
+      processedContent = `\`\`\`yaml\n${yamlContent}\n\`\`\`\n\n${restContent}`
+      logger.info('[SkillEditor] 处理了 YAML frontmatter')
+    }
+    
+    // 创建预览容器
+    const previewContainer = document.createElement('div')
+    previewContainer.className = 'vditor-preview-container'
+    el.appendChild(previewContainer)
+    
+    logger.info('[SkillEditor] 预览容器已创建，准备调用 Vditor.preview')
+    
+    // 检查 Vditor 是否可用
+    if (typeof Vditor === 'undefined') {
+      logger.error('[SkillEditor] Vditor 未定义！')
+      previewContainer.innerHTML = '<div style="color: red; padding: 20px;">错误：Vditor 库未加载</div>'
+      return
+    }
+    
+    // 检查 Vditor.preview 方法是否存在
+    // @ts-ignore
+    if (typeof Vditor.preview !== 'function') {
+      logger.error('[SkillEditor] Vditor.preview 方法不存在！')
+      previewContainer.innerHTML = '<div style="color: red; padding: 20px;">错误：Vditor.preview 方法不可用</div>'
+      return
+    }
+    
+    logger.info('[SkillEditor] 调用 Vditor.preview', {
+      cdn: './vditor',
+      processedContentLength: processedContent.length
+    })
+    
+    // 使用 Vditor.preview 静态方法渲染
+    // @ts-ignore
+    Vditor.preview(previewContainer, processedContent, {
+      cdn: './vditor',
+      hljs: { style: 'github', lineNumber: true },
+      mode: 'light'
+    })
+    
+    logger.info('[SkillEditor] Vditor.preview 调用完成')
+    
+    // 检查渲染结果
+    setTimeout(() => {
+      const renderedContent = previewContainer.innerHTML
+      logger.info('[SkillEditor] 渲染结果检查', {
+        hasContent: renderedContent.length > 0,
+        contentLength: renderedContent.length,
+        preview: renderedContent.substring(0, 200)
+      })
+    }, 100)
+    
+  } catch (error) {
+    logger.errorDetail('[SkillEditor] 渲染预览失败', error)
+    el.innerHTML = `<div style="color: red; padding: 20px;">渲染失败：${error instanceof Error ? error.message : String(error)}</div>`
+  }
 }
 
 function initTargetVditor(el: HTMLDivElement, content: string) {
+  logger.info('[SkillEditor] 初始化目标编辑器（翻译面板）', {
+    contentLength: content.length
+  })
+  
   targetVdReady.value = false
   
-  // 直接使用预览模式渲染
-  renderPreviewOnly(el, content)
-  
-  // 标记为就绪
-  setTimeout(() => {
-    targetVdReady.value = true
-  }, 50)
+  try {
+    // 直接使用预览模式渲染
+    renderPreviewOnly(el, content)
+    
+    // 标记为就绪
+    setTimeout(() => {
+      targetVdReady.value = true
+      logger.info('[SkillEditor] 目标编辑器标记为就绪')
+    }, 50)
+  } catch (error) {
+    logger.errorDetail('[SkillEditor] 初始化目标编辑器失败', error)
+  }
 }
 
 function initSourceVditor(el: HTMLDivElement, content: string) {
-  // 直接使用预览模式渲染
-  renderPreviewOnly(el, content)
+  logger.info('[SkillEditor] 初始化源编辑器（原文面板）', {
+    contentLength: content.length
+  })
   
-  sourceVdReady = true
-  
-  if (pendingTargetContent && targetVditorEl.value) {
-    initTargetVditor(targetVditorEl.value, pendingTargetContent)
-    pendingTargetContent = null
+  try {
+    // 直接使用预览模式渲染
+    renderPreviewOnly(el, content)
+    
+    sourceVdReady = true
+    logger.info('[SkillEditor] 源编辑器标记为就绪')
+    
+    if (pendingTargetContent && targetVditorEl.value) {
+      logger.info('[SkillEditor] 处理待渲染的翻译内容')
+      initTargetVditor(targetVditorEl.value, pendingTargetContent)
+      pendingTargetContent = null
+    }
+  } catch (error) {
+    logger.errorDetail('[SkillEditor] 初始化源编辑器失败', error)
   }
 }
 
 // Source content watch: destroy both, then init source Vditor
 watch(sourceContent, () => {
-  if (!isMarkdown.value || !sourceContent.value || !sourceVditorEl.value) return
+  logger.info('[SkillEditor] sourceContent 变化', {
+    isMarkdown: isMarkdown.value,
+    hasContent: !!sourceContent.value,
+    contentLength: sourceContent.value.length,
+    hasSourceEl: !!sourceVditorEl.value
+  })
+  
+  if (!isMarkdown.value || !sourceContent.value || !sourceVditorEl.value) {
+    logger.warn('[SkillEditor] 跳过源编辑器初始化', {
+      isMarkdown: isMarkdown.value,
+      hasContent: !!sourceContent.value,
+      hasSourceEl: !!sourceVditorEl.value
+    })
+    return
+  }
+  
   destroyVditors()
   initSourceVditor(sourceVditorEl.value, sourceContent.value)
 }, { flush: 'post' })
 
 // Target content watch: init target only after source Vditor is ready (Lute loaded)
 watch(targetContent, () => {
-  if (!isMarkdown.value || !targetContent.value) return
+  logger.info('[SkillEditor] targetContent 变化', {
+    isMarkdown: isMarkdown.value,
+    hasContent: !!targetContent.value,
+    contentLength: targetContent.value.length,
+    hasTargetVd: !!targetVd,
+    sourceVdReady: sourceVdReady
+  })
+  
+  if (!isMarkdown.value || !targetContent.value) {
+    logger.warn('[SkillEditor] 跳过目标编辑器初始化', {
+      isMarkdown: isMarkdown.value,
+      hasContent: !!targetContent.value
+    })
+    return
+  }
+  
   if (targetVd) {
     // Already exists, just update value
+    logger.info('[SkillEditor] 更新现有目标编辑器内容')
     targetVd.setValue(targetContent.value)
   } else if (sourceVdReady && targetVditorEl.value) {
     // Source is ready, safe to init target immediately
+    logger.info('[SkillEditor] 源编辑器已就绪，立即初始化目标编辑器')
     initTargetVditor(targetVditorEl.value, targetContent.value)
   } else {
     // Source still initializing — store content to be used in after() callback
+    logger.info('[SkillEditor] 源编辑器未就绪，暂存翻译内容')
     pendingTargetContent = targetContent.value
   }
 }, { flush: 'post' })
@@ -354,14 +461,37 @@ function toggleDir(path: string) {
 }
 
 async function loadDirTree() {
-  if (!skillPath.value) return
-  // @ts-ignore
-  const tree = await window.api.readDirTree(skillPath.value)
-  if (tree?.children) {
-    fileTree.value = tree.children
-    expandedDirs.value = new Set([skillPath.value])
-    const defaultFile = findFirstMd(tree.children, 'skill.md') || findFirstMd(tree.children)
-    if (defaultFile) handleFileClick(defaultFile)
+  if (!skillPath.value) {
+    logger.warn('[SkillEditor] skillPath 为空，无法加载目录树')
+    return
+  }
+  
+  logger.info('[SkillEditor] 加载目录树', { skillPath: skillPath.value })
+  
+  try {
+    // @ts-ignore
+    const tree = await window.api.readDirTree(skillPath.value)
+    
+    if (tree?.children) {
+      fileTree.value = tree.children
+      expandedDirs.value = new Set([skillPath.value])
+      
+      logger.info('[SkillEditor] 目录树加载成功', {
+        childrenCount: tree.children.length
+      })
+      
+      const defaultFile = findFirstMd(tree.children, 'skill.md') || findFirstMd(tree.children)
+      if (defaultFile) {
+        logger.info('[SkillEditor] 找到默认文件', { path: defaultFile.path })
+        handleFileClick(defaultFile)
+      } else {
+        logger.warn('[SkillEditor] 未找到默认 Markdown 文件')
+      }
+    } else {
+      logger.warn('[SkillEditor] 目录树为空或无 children')
+    }
+  } catch (error) {
+    logger.errorDetail('[SkillEditor] 加载目录树失败', error)
   }
 }
 
@@ -380,30 +510,64 @@ function findFirstMd(nodes: FileNode[], exact?: string): FileNode | undefined {
 
 async function handleFileClick(node: FileNode) {
   if (node.isDirectory) return
+  
+  logger.info('[SkillEditor] 文件点击', {
+    path: node.path,
+    name: node.name,
+    isMarkdown: isMdFile(node.name)
+  })
+  
   activeFilePath.value = node.path
   activeFileName.value = node.name
   sourceContent.value = ''
   targetContent.value = ''
 
-  // @ts-ignore
-  sourceContent.value = (await window.api.readFile(node.path)) ?? ''
+  try {
+    // @ts-ignore
+    const content = await window.api.readFile(node.path)
+    sourceContent.value = content ?? ''
+    
+    logger.info('[SkillEditor] 文件读取成功', {
+      path: node.path,
+      contentLength: sourceContent.value.length,
+      contentPreview: sourceContent.value.substring(0, 100)
+    })
 
-  // Only MD files trigger translation check
-  if (isMdFile(node.name) && !isCnMdFile(node.name)) {
-    checkOrTranslate(node.path)
+    // Only MD files trigger translation check
+    if (isMdFile(node.name) && !isCnMdFile(node.name)) {
+      logger.info('[SkillEditor] 这是 Markdown 文件，检查翻译')
+      checkOrTranslate(node.path)
+    }
+  } catch (error) {
+    logger.errorDetail('[SkillEditor] 读取文件失败', error)
+    sourceContent.value = `读取文件失败：${error instanceof Error ? error.message : String(error)}`
   }
 }
 
 async function checkOrTranslate(filePath: string) {
+  logger.info('[SkillEditor] 检查翻译文件', { filePath })
+  
   const extIndex = filePath.lastIndexOf('.')
   const base = extIndex !== -1 ? filePath.substring(0, extIndex) : filePath
   const ext  = extIndex !== -1 ? filePath.substring(extIndex) : '.md'
   const cnPath = `${base}_cn${ext}`
-  // @ts-ignore
-  const cached: string | null = await window.api.readFile(cnPath)
-  if (cached !== null) {
-    targetContent.value = cached
-  } else {
+  
+  logger.info('[SkillEditor] 翻译文件路径', { cnPath })
+  
+  try {
+    // @ts-ignore
+    const cached: string | null = await window.api.readFile(cnPath)
+    if (cached !== null) {
+      logger.info('[SkillEditor] 找到缓存的翻译文件', {
+        contentLength: cached.length
+      })
+      targetContent.value = cached
+    } else {
+      logger.info('[SkillEditor] 未找到翻译文件，触发翻译')
+      triggerTranslation(filePath)
+    }
+  } catch (error) {
+    logger.errorDetail('[SkillEditor] 检查翻译文件失败', error)
     triggerTranslation(filePath)
   }
 }
@@ -424,7 +588,21 @@ async function triggerTranslation(filePath: string) {
   }
 }
 
-onMounted(() => loadDirTree())
+onMounted(() => {
+  logger.info('[SkillEditor] 组件已挂载', {
+    skillPath: skillPath.value,
+    skillName: skillName.value
+  })
+  
+  // 检查 Vditor 是否已加载
+  logger.info('[SkillEditor] Vditor 加载状态', {
+    vditorDefined: typeof Vditor !== 'undefined',
+    // @ts-ignore
+    vditorPreviewExists: typeof Vditor !== 'undefined' && typeof Vditor.preview === 'function'
+  })
+  
+  loadDirTree()
+})
 </script>
 
 <style scoped>

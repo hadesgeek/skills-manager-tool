@@ -45,7 +45,8 @@
         <button class="btn cancel-btn" @click="clearSearch">清空搜索</button>
       </div>
       <div v-else-if="skills.length === 0" class="empty-state">
-        <p>当前目录 ({{ skillsPath }}) 下没有发现技能，请点击右上方按钮新建。</p>
+        <p v-if="!skillsPath">请先在设置页面配置 Skills 目录</p>
+        <p v-else>当前目录 ({{ skillsPath }}) 下没有发现技能，请点击右上方按钮新建。</p>
       </div>
 
       <div v-else class="skills-list">
@@ -119,6 +120,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Modal from '../components/common/Modal.vue'
+import { logger } from '../utils/logger'
 
 const router = useRouter()
 
@@ -138,7 +140,7 @@ const showModal = ref(false)
 
 const skills = ref<Skill[]>([])
 const loading = ref(false)
-const skillsPath = ref('E:\\AITools\\SKillsManager\\Skills') // TODO: Read from settings later
+const skillsPath = ref('') // 从设置中读取
 const searchQuery = ref('') // 搜索关键词
 
 // 长按相关状态
@@ -164,11 +166,46 @@ const filteredSkills = computed(() => {
 async function fetchSkills() {
   loading.value = true
   try {
-    console.log('[SkillsManager] 快速加载 Skills...')
+    logger.info('[SkillsManager] 开始快速加载 Skills...')
+    
+    // 获取应用设置
+    logger.info('[SkillsManager] 获取应用设置...')
+    // @ts-ignore
+    const settings = await window.api.getAppSettings()
+    logger.info('[SkillsManager] 应用设置:', settings)
+    
+    // 检查 Skills 目录是否已配置
+    if (!settings?.general?.skillsDirectory) {
+      logger.warn('[SkillsManager] Skills 目录未配置')
+      alert('请先在设置页面配置 Skills 目录')
+      return
+    }
+    
+    skillsPath.value = settings.general.skillsDirectory
+    logger.info('[SkillsManager] Skills 路径:', skillsPath.value)
+    
+    // 检查 API 是否可用
+    if (!window.api || !window.api.getSkillsFast) {
+      logger.error('[SkillsManager] window.api.getSkillsFast 不可用')
+      throw new Error('API 不可用')
+    }
     
     // 1. 快速加载基本信息（使用缓存的翻译和图标）
+    logger.info('[SkillsManager] 调用 getSkillsFast...')
     // @ts-ignore
     const fastSkills = await window.api.getSkillsFast(skillsPath.value)
+    
+    logger.info('[SkillsManager] getSkillsFast 返回:', {
+      count: fastSkills?.length || 0,
+      isArray: Array.isArray(fastSkills),
+      sample: fastSkills?.[0]
+    })
+    
+    if (!Array.isArray(fastSkills)) {
+      logger.error('[SkillsManager] getSkillsFast 返回的不是数组:', fastSkills)
+      throw new Error('返回数据格式错误')
+    }
+    
     skills.value = fastSkills.map(skill => ({
       ...skill,
       translating: false,
@@ -176,24 +213,27 @@ async function fetchSkills() {
       isActive: false
     }))
     
-    console.log(`[SkillsManager] 快速加载完成，共 ${skills.value.length} 个 Skills`)
+    logger.info(`[SkillsManager] 快速加载完成，共 ${skills.value.length} 个 Skills`)
     
     // 2. 检查 Skills 的激活状态
     await checkSkillsActiveStatus()
     
     // 3. 异步处理需要翻译和生成图标的 Skills
-    // @ts-ignore
-    const settings = await window.api.getAppSettings()
     const apiKey = settings?.ai?.geminiApiKey || ''
     if (apiKey) {
+      logger.info('[SkillsManager] API Key 已配置，开始异步处理')
       processSkillsAsync(apiKey)
     } else {
-      console.log('[SkillsManager] 未配置 API Key，跳过翻译和图标生成')
+      logger.warn('[SkillsManager] 未配置 API Key，跳过翻译和图标生成')
     }
   } catch (error) {
-    console.error('[SkillsManager] 加载 Skills 失败:', error)
+    logger.errorDetail('[SkillsManager] 加载 Skills 失败', error)
+    // 显示错误提示
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    alert(`加载 Skills 失败: ${errorMessage}`)
   } finally {
     loading.value = false
+    logger.info('[SkillsManager] 加载流程结束')
   }
 }
 

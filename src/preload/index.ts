@@ -37,6 +37,15 @@ const api = {
   updateToolSkills: (toolId: string, skillId: string, enabled: boolean) => electronAPI.ipcRenderer.invoke('storage:updateToolSkills', toolId, skillId, enabled),
   updateToolInstallation: (toolId: string, installed: boolean, configPath: string, skillsPath: string) => electronAPI.ipcRenderer.invoke('storage:updateToolInstallation', toolId, installed, configPath, skillsPath),
   
+  // 日志管理
+  getLogPath: () => electronAPI.ipcRenderer.invoke('logger:get-log-path'),
+  getLogDir: () => electronAPI.ipcRenderer.invoke('logger:get-log-dir'),
+  readLogs: () => electronAPI.ipcRenderer.invoke('logger:read-logs'),
+  clearLogs: () => electronAPI.ipcRenderer.invoke('logger:clear-logs'),
+  
+  // 开发者工具
+  toggleDevTools: () => electronAPI.ipcRenderer.invoke('devtools:toggle'),
+  
   // 对话框
   openDirectory: () => electronAPI.ipcRenderer.invoke('dialog:openDirectory')
 }
