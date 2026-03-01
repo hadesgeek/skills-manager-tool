@@ -89,6 +89,8 @@ Configure Skills individually for each tool:
 - 🔍 **Quick Search**: Fast search and filter Skills
 - 💾 **State Persistence**: Auto-save configurations and states
 - 🎭 **Multi-Tool Support**: Supports mainstream AI coding tools like Kiro, Qoder, Cursor, Cline
+- 📊 **Comprehensive Logging**: Detailed logs in both development and production for easy troubleshooting
+- 🔧 **Developer Tools**: DevTools support in development environment for debugging
 
 ## 🚀 Quick Start
 
@@ -133,6 +135,8 @@ After launching the app, configure the following:
 1. **Set Skills Directory**: Specify the root directory for all Skills
 2. **Configure Gemini API Key** (optional): For AI translation and icon generation
 3. **Detect Installed Tools**: Auto-scan installed AI coding tools on your system
+
+> 💡 Tip: If you encounter issues, press F12 in development mode to open DevTools and view detailed logs
 
 ### 2. Managing Skills
 
@@ -189,6 +193,7 @@ Uses Gemini Nano Banana model to generate icons:
 
 - JSON file storage
 - File system caching
+- Log files (`%APPDATA%\skills-manager-app\logs\`)
 
 ## 📁 Project Structure
 
@@ -239,17 +244,44 @@ Contributions, issues, and suggestions are welcome!
 
 ## 📝 Development Logs
 
-Detailed development process and technical decisions are documented in the `docs/` directory:
+Detailed development process and technical decisions are documented in the `plan/` directory:
 
-- [Storage Design](docs/STORAGE_DESIGN.md)
-- [Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)
-- [Quick Start](docs/QUICK_START.md)
+- [Logging System Implementation](plan/logging-implementation-summary.md)
+- [Skills Directory Fix](plan/skills-directory-fix-summary.md)
+- [DevTools Enablement](plan/devtools-enable-summary.md)
+- [Vditor Rendering Issue Resolution](plan/vditor-issue-resolution-summary.md)
+- [Production Environment Optimization](plan/production-devtools-removal.md)
+- [Complete Work Summary](plan/final-work-summary.md)
+
+Testing and debugging guides in the `test/` directory:
+
+- [Vditor Debug Guide](test/vditor-debug-guide.md)
+- [Packaging Test Guide](test/vditor-packaging-test.md)
+- [DevTools Quick Reference](test/devtools-quick-reference.md)
 
 ## 🐛 Known Issues
 
 - Currently only supports Windows systems
 - Icon generation depends on Gemini API, requires stable network connection
 - First load may be slow with large number of Skills
+
+## 🔧 Troubleshooting
+
+If you encounter issues, try the following:
+
+1. **Development Environment Debugging**:
+   - Run `npm run dev`
+   - Press F12 or Ctrl+Shift+I to open DevTools
+   - Check console logs and network requests
+
+2. **View Log Files**:
+   - Log location: `%APPDATA%\skills-manager-app\logs\app.log`
+   - Contains detailed error messages and stack traces
+
+3. **Common Issues**:
+   - Empty Skills page: Check if Skills directory is correctly configured in settings
+   - Markdown not rendering: Check error messages in log files
+   - Tool sync failure: Verify tool paths are configured correctly
 
 ## 🗺️ Roadmap
 
@@ -275,7 +307,7 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 For questions or suggestions, feel free to contact:
 
-- Submit an [Issue](https://github.com/yourusername/skills-manager/issues)
+- Submit an [Issue](https://github.com/hadesgeek/skills-manager-tool/issues)
 - Send email to: hadesgeek@gmail.com
 
 ---
