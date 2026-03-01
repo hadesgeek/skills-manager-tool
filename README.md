@@ -308,8 +308,6 @@ Made with ❤️
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=hadesgeek/skills-manager-tool&type=Date)](https://star-history.com/#hadesgeek/skills-manager-tool&Date)
-
-![Views](https://komarev.com/ghpvc/?username=hadesgeek&repo=skills-manager-tool&label=Repository%20views&color=blue&style=flat)
+[![Star History Chart](https://api.star-history.com/svg?repos=hadesgeek/skills-manager-tool&type=timeline&logscale&legend=top-left)](https://www.star-history.com/#hadesgeek/skills-manager-tool&type=timeline&logscale&legend=top-left)
 
 [![Clement Parker profile views](https://u8views.com/api/v1/github/profiles/129089956/views/day-week-month-total-count.svg)](https://u8views.com/github/hadesgeek)
