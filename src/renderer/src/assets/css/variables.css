@@ -1,0 +1,21 @@
+/* src/renderer/src/assets/styles/variables.css */
+:root {
+  --app-bg-color: #FFFFFF;
+  --sidebar-bg-color: #F8F9FA;
+  --titlebar-bg-color: #F8F9FA;
+  --border-color: #E5E7EB;
+  
+  --text-primary: #1F2937;
+  --text-secondary: #6B7280;
+  --text-placeholder: #9CA3AF;
+  
+  --primary-color: #2563EB;
+  --primary-hover: #1D4ED8;
+  --danger-color: #DC2626;
+  --success-color: #16A34A;
+
+  --modal-bg: #FFFFFF;
+  --modal-overlay-bg: rgba(0, 0, 0, 0.5);
+
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}

@@ -1,0 +1,94 @@
+请手动更新 Tools.vue 中的以下函数：
+
+1. 找到 toggleTool 函数，替换为：
+
+```javascript
+// 切换工具开关
+const toggleTool = async (tool: Tool) => {
+  const newState = !tool.installed
+  
+  if (newState) {
+    // 开启工具
+    const config = await window.api.getToolConfig(tool.id)
+    
+    // 如果是第一次开启（没有配置的 skills）
+    if (Object.keys(config.skills || {}).length === 0) {
+      // 打开 Skills 列表弹窗让用户选择
+      await openSkillListModal(tool)
+    } else {
+      // 不是第一次，直接根据配置拷贝已启用的 skills
+      const success = await window.api.toggleTool(tool.id, true)
+      if (success) {
+        tool.installed = true
+        console.log(`工具 ${tool.name} 已开启`)
+      }
+    }
+  } else {
+    // 关闭工具：删除所有 skills
+    const success = await window.api.toggleTool(tool.id, false)
+    if (success) {
+      tool.installed = false
+      console.log(`工具 ${tool.name} 已关闭`)
+    }
+  }
+}
+```
+
+2. 找到 loadToolSkills 函数，替换为：
+
+```javascript
+// 加载工具的 Skills 列表
+const loadToolSkills = async (tool: Tool) => {
+  try {
+    const skills = await window.api.getToolSkills(tool.id)
+    currentToolSkills.value = skills
+    console.log(`加载 ${tool.name} 的 Skills:`, skills)
+  } catch (error) {
+    console.error('加载 Skills 失败:', error)
+    currentToolSkills.value = []
+  }
+}
+```
+
+3. 找到 toggleSkill 函数，替换为：
+
+```javascript
+// 切换 Skill 开关
+const toggleSkill = async (skill: Skill) => {
+  const newState = !skill.active
+  
+  if (!currentTool.value) return
+  
+  try {
+    const success = await window.api.toggleSkill(
+      currentTool.value.id,
+      skill.name,
+      newState
+    )
+    
+    if (success) {
+      skill.active = newState
+      console.log(`Skill ${skill.name} ${newState ? '已启用' : '已禁用'}`)
+    }
+  } catch (error) {
+    console.error('切换 Skill 失败:', error)
+  }
+}
+```
+
+4. 在 loadTools 函数末尾添加：
+
+```javascript
+// 加载每个工具的配置，更新 installed 状态
+for (const tool of toolsData.value) {
+  const config = await window.api.getToolConfig(tool.id)
+  tool.installed = config.enabled || false
+}
+```
+
+5. 在 checkToolsInstallation 函数中，删除这一行：
+```javascript
+tool.installed = result.installed
+```
+
+完成后保存文件，确保使用 UTF-8 编码。

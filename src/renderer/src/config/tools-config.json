@@ -1,0 +1,110 @@
+[
+  {
+    "name": "Gemini",
+    "dirName": ".gemini"
+  },
+  {
+    "name": "Antigravity",
+    "dirName": ".antigravity"
+  },
+  {
+    "name": "Kiro",
+    "dirName": ".kiro"
+  },
+  {
+    "name": "Qoder",
+    "dirName": ".qoder"
+  },
+  {
+    "name": "Claude Code",
+    "dirName": ".claude"
+  },
+  {
+    "name": "Codex",
+    "dirName": ".codex"
+  },
+  {
+    "name": "CodeBuddy",
+    "dirName": ".codebuddy"
+  },
+  {
+    "name": "OpenCode",
+    "dirName": ".opencode"
+  },
+  {
+    "name": "Cursor",
+    "dirName": ".cursor"
+  },
+  {
+    "name": "Windsurf",
+    "dirName": ".windsurf"
+  },
+  {
+    "name": "Trae",
+    "dirName": ".trae"
+  },
+  {
+    "name": "Droid",
+    "dirName": ".droid"
+  },
+  {
+    "name": "Augment",
+    "dirName": ".augment"
+  },
+  {
+    "name": "OpenClaw",
+    "dirName": ".openclaw"
+  },
+  {
+    "name": "Cline",
+    "dirName": ".cline"
+  },
+  {
+    "name": "Vercel Skills",
+    "dirName": ".vercel-skills"
+  },
+  {
+    "name": "CommandCode",
+    "dirName": ".commandcode"
+  },
+  {
+    "name": "Continue",
+    "dirName": ".continue"
+  },
+  {
+    "name": "Crush",
+    "dirName": ".crush"
+  },
+  {
+    "name": "Goose",
+    "dirName": ".goose"
+  },
+  {
+    "name": "iFlow",
+    "dirName": ".iflow"
+  },
+  {
+    "name": "Junie",
+    "dirName": ".junie"
+  },
+  {
+    "name": "Kilo Code",
+    "dirName": ".kilocode"
+  },
+  {
+    "name": "Qwen Code",
+    "dirName": ".qwen"
+  },
+  {
+    "name": "Roo Code",
+    "dirName": ".roo"
+  },
+  {
+    "name": "Zencoder",
+    "dirName": ".zencoder"
+  },
+  {
+    "name": "Pi",
+    "dirName": ".pi"
+  }
+]
