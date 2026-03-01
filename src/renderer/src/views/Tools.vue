@@ -287,7 +287,10 @@ const loadTools = async () => {
     const toolsState = await window.api.getToolsState()
     console.log('[Tools] 加载的工具状态:', toolsState)
     
-    // 3. 合并状态到工具列表
+    // 3. 检查是否需要初始化检测（第一次启动或配置为空）
+    let needsInitialCheck = false
+    
+    // 4. 合并状态到工具列表
     toolsData.value.forEach(tool => {
       const savedState = toolsState.tools[tool.id]
       if (savedState) {
@@ -296,8 +299,17 @@ const loadTools = async () => {
         tool.configPath = savedState.configPath || ''
         tool.skillsPath = savedState.skillsPath || ''
         console.log(`[Tools] ${tool.name} - 启用: ${tool.enabled}, 安装: ${tool.installed}`)
+      } else {
+        // 配置中没有这个工具的信息，需要检测
+        needsInitialCheck = true
       }
     })
+    
+    // 5. 如果需要初始化检测，执行一次检测
+    if (needsInitialCheck) {
+      console.log('[Tools] 检测到首次启动或配置不完整，执行初始化检测...')
+      await checkToolsInstallation()
+    }
     
     console.log('[Tools] 工具列表加载完成')
   } catch (error) {
