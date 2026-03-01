@@ -13,6 +13,7 @@ asarUnpack:
   - resources/**
 win:
   executableName: skills-manager-app
+  signAndEditExecutable: false  # 禁用代码签名
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
