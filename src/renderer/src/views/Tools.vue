@@ -379,27 +379,45 @@ const toggleTool = async (tool: Tool) => {
   try {
     console.log(`[Tools] 切换工具 ${tool.name} 状态: ${tool.enabled} -> ${newState}`)
     
-    // 更新持久化存储
-    // @ts-ignore
-    const success = await window.api.updateToolEnabled(tool.id, newState)
-    
-    if (success) {
-      tool.enabled = newState
-      console.log(`[Tools] 工具 ${tool.name} ${newState ? '已开启' : '已关闭'}`)
+    if (newState) {
+      // 开启工具
+      // @ts-ignore
+      const toolConfig = await window.api.getStorageToolConfig(tool.id)
+      const hasSkills = toolConfig && toolConfig.enabledSkills && Object.keys(toolConfig.enabledSkills).length > 0
       
-      // 如果是开启工具，检查是否需要打开 Skills 选择弹窗
-      if (newState) {
-        // @ts-ignore
-        const toolConfig = await window.api.getStorageToolConfig(tool.id)
-        const hasSkills = toolConfig && toolConfig.enabledSkills && Object.keys(toolConfig.enabledSkills).length > 0
+      if (!hasSkills) {
+        // 第一次开启，打开 Skills 列表让用户选择
+        console.log(`[Tools] 第一次开启 ${tool.name}，打开 Skills 选择弹窗`)
+        await openSkillListModal(tool)
+      } else {
+        // 已有 Skills 配置，执行拷贝操作
+        console.log(`[Tools] 开启 ${tool.name}，拷贝已启用的 Skills`)
+        const success = await window.api.toggleTool(tool.id, true)
         
-        if (!hasSkills) {
-          // 第一次开启，打开 Skills 列表让用户选择
-          await openSkillListModal(tool)
+        if (success) {
+          // 更新持久化存储
+          // @ts-ignore
+          await window.api.updateToolEnabled(tool.id, true)
+          tool.enabled = true
+          console.log(`[Tools] 工具 ${tool.name} 已开启`)
+        } else {
+          console.error(`[Tools] 开启工具 ${tool.name} 失败`)
         }
       }
     } else {
-      console.error(`[Tools] 更新工具 ${tool.name} 状态失败`)
+      // 关闭工具：删除所有 Skills
+      console.log(`[Tools] 关闭 ${tool.name}，删除所有 Skills`)
+      const success = await window.api.toggleTool(tool.id, false)
+      
+      if (success) {
+        // 更新持久化存储
+        // @ts-ignore
+        await window.api.updateToolEnabled(tool.id, false)
+        tool.enabled = false
+        console.log(`[Tools] 工具 ${tool.name} 已关闭`)
+      } else {
+        console.error(`[Tools] 关闭工具 ${tool.name} 失败`)
+      }
     }
   } catch (error) {
     console.error(`[Tools] 切换工具 ${tool.name} 失败:`, error)
@@ -449,9 +467,8 @@ const toggleSkill = async (skill: Skill) => {
   try {
     console.log(`[Tools] 切换 Skill ${skill.name} 状态: ${skill.active} -> ${newState}`)
     
-    // 更新持久化存储
-    // @ts-ignore
-    const success = await window.api.updateToolSkills(
+    // 调用后端拷贝/删除 Skill 文件
+    const success = await window.api.toggleSkill(
       currentTool.value.id,
       skill.name,
       newState
@@ -459,9 +476,18 @@ const toggleSkill = async (skill: Skill) => {
     
     if (success) {
       skill.active = newState
+      
+      // 更新持久化存储
+      // @ts-ignore
+      await window.api.updateToolSkills(
+        currentTool.value.id,
+        skill.name,
+        newState
+      )
+      
       console.log(`[Tools] Skill ${skill.name} ${newState ? '已启用' : '已禁用'}`)
     } else {
-      console.error(`[Tools] 更新 Skill ${skill.name} 状态失败`)
+      console.error(`[Tools] 切换 Skill ${skill.name} 失败`)
     }
   } catch (error) {
     console.error(`[Tools] 切换 Skill ${skill.name} 失败:`, error)
@@ -505,6 +531,9 @@ const batchEnableSelected = async () => {
   for (const skillName of selectedSkills.value) {
     const skill = currentToolSkills.value.find(s => s.name === skillName)
     if (skill && !skill.active) {
+      // 调用后端拷贝 Skill
+      await window.api.toggleSkill(currentTool.value.id, skillName, true)
+      // 更新持久化存储
       // @ts-ignore
       await window.api.updateToolSkills(currentTool.value.id, skillName, true)
       skill.active = true
@@ -525,6 +554,9 @@ const batchDisableSelected = async () => {
   for (const skillName of selectedSkills.value) {
     const skill = currentToolSkills.value.find(s => s.name === skillName)
     if (skill && skill.active) {
+      // 调用后端删除 Skill
+      await window.api.toggleSkill(currentTool.value.id, skillName, false)
+      // 更新持久化存储
       // @ts-ignore
       await window.api.updateToolSkills(currentTool.value.id, skillName, false)
       skill.active = false
