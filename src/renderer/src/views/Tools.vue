@@ -267,24 +267,41 @@ const nameToId = (name: string): string => {
 
 // 加载工具列表
 const loadTools = async () => {
-  toolsData.value = toolsConfigData.map(tool => ({
-    id: nameToId(tool.name),
-    name: tool.name,
-    dirName: tool.dirName,
-    installed: false,  // 是否检测到工具目录
-    enabled: false,    // 用户是否开启工具
-    configPath: '',
-    skillsPath: '',
-    iconPath: getToolIconPath(nameToId(tool.name))
-  }))
-  
-  // 检查工具安装状态（更新 installed 和路径）
-  await checkToolsInstallation()
-  
-  // 加载每个工具的配置，更新 enabled 状态
-  for (const tool of toolsData.value) {
-    const config = await window.api.getToolConfig(tool.id)
-    tool.enabled = config.enabled || false
+  try {
+    console.log('[Tools] 开始加载工具列表...')
+    
+    // 1. 从配置文件加载工具基础信息
+    toolsData.value = toolsConfigData.map(tool => ({
+      id: nameToId(tool.name),
+      name: tool.name,
+      dirName: tool.dirName,
+      installed: false,
+      enabled: false,
+      configPath: '',
+      skillsPath: '',
+      iconPath: getToolIconPath(nameToId(tool.name))
+    }))
+    
+    // 2. 检查工具安装状态（更新 installed 和路径）
+    await checkToolsInstallation()
+    
+    // 3. 从持久化存储加载工具状态
+    // @ts-ignore
+    const toolsState = await window.api.getToolsState()
+    console.log('[Tools] 加载的工具状态:', toolsState)
+    
+    // 4. 合并状态到工具列表
+    toolsData.value.forEach(tool => {
+      const savedState = toolsState.tools[tool.id]
+      if (savedState) {
+        tool.enabled = savedState.enabled || false
+        console.log(`[Tools] ${tool.name} 启用状态: ${tool.enabled}`)
+      }
+    })
+    
+    console.log('[Tools] 工具列表加载完成')
+  } catch (error) {
+    console.error('[Tools] 加载工具列表失败:', error)
   }
 }
 
@@ -327,31 +344,35 @@ const refreshTools = async () => {
 
 // 切换工具开关
 const toggleTool = async (tool: Tool) => {
-  const newState = !tool.enabled  // 切换 enabled 状态，不是 installed
+  const newState = !tool.enabled
   
-  if (newState) {
-    // 开启工具
-    const config = await window.api.getToolConfig(tool.id)
+  try {
+    console.log(`[Tools] 切换工具 ${tool.name} 状态: ${tool.enabled} -> ${newState}`)
     
-    // 如果是第一次开启（没有配置的 skills）
-    if (Object.keys(config.skills || {}).length === 0) {
-      // 打开 Skills 列表弹窗让用户选择
-      await openSkillListModal(tool)
-    } else {
-      // 不是第一次，直接根据配置拷贝已启用的 skills
-      const success = await window.api.toggleTool(tool.id, true)
-      if (success) {
-        tool.enabled = true
-        console.log(`工具 ${tool.name} 已开启`)
-      }
-    }
-  } else {
-    // 关闭工具：删除所有 skills
-    const success = await window.api.toggleTool(tool.id, false)
+    // 更新持久化存储
+    // @ts-ignore
+    const success = await window.api.updateToolEnabled(tool.id, newState)
+    
     if (success) {
-      tool.enabled = false
-      console.log(`工具 ${tool.name} 已关闭`)
+      tool.enabled = newState
+      console.log(`[Tools] 工具 ${tool.name} ${newState ? '已开启' : '已关闭'}`)
+      
+      // 如果是开启工具，检查是否需要打开 Skills 选择弹窗
+      if (newState) {
+        // @ts-ignore
+        const toolConfig = await window.api.getStorageToolConfig(tool.id)
+        const hasSkills = toolConfig && toolConfig.enabledSkills && Object.keys(toolConfig.enabledSkills).length > 0
+        
+        if (!hasSkills) {
+          // 第一次开启，打开 Skills 列表让用户选择
+          await openSkillListModal(tool)
+        }
+      }
+    } else {
+      console.error(`[Tools] 更新工具 ${tool.name} 状态失败`)
     }
+  } catch (error) {
+    console.error(`[Tools] 切换工具 ${tool.name} 失败:`, error)
   }
 }
 
@@ -365,12 +386,26 @@ const openSkillListModal = async (tool: Tool) => {
 // 加载工具的 Skills 列表
 const loadToolSkills = async (tool: Tool) => {
   try {
+    console.log(`[Tools] 加载 ${tool.name} 的 Skills...`)
+    
+    // 1. 从文件系统获取 Skills 列表
     const skills = await window.api.getToolSkills(tool.id, skillsPath.value)
-    currentToolSkills.value = skills
-    console.log(`加载 ${tool.name} 的 Skills: ${skills.length} 个`)
-    console.log('Skills 数据:', skills)
+    
+    // 2. 从持久化存储获取启用状态
+    // @ts-ignore
+    const toolConfig = await window.api.getStorageToolConfig(tool.id)
+    const enabledSkills = toolConfig?.enabledSkills || {}
+    
+    // 3. 合并状态
+    currentToolSkills.value = skills.map(skill => ({
+      ...skill,
+      active: enabledSkills[skill.name] || false
+    }))
+    
+    console.log(`[Tools] 加载 ${tool.name} 的 Skills 完成: ${skills.length} 个`)
+    console.log('[Tools] Skills 启用状态:', enabledSkills)
   } catch (error) {
-    console.error('加载 Skills 失败:', error)
+    console.error('[Tools] 加载 Skills 失败:', error)
     currentToolSkills.value = []
   }
 }
@@ -382,7 +417,11 @@ const toggleSkill = async (skill: Skill) => {
   if (!currentTool.value) return
   
   try {
-    const success = await window.api.toggleSkill(
+    console.log(`[Tools] 切换 Skill ${skill.name} 状态: ${skill.active} -> ${newState}`)
+    
+    // 更新持久化存储
+    // @ts-ignore
+    const success = await window.api.updateToolSkills(
       currentTool.value.id,
       skill.name,
       newState
@@ -390,10 +429,12 @@ const toggleSkill = async (skill: Skill) => {
     
     if (success) {
       skill.active = newState
-      console.log(`Skill ${skill.name} ${newState ? '已启用' : '已禁用'}`)
+      console.log(`[Tools] Skill ${skill.name} ${newState ? '已启用' : '已禁用'}`)
+    } else {
+      console.error(`[Tools] 更新 Skill ${skill.name} 状态失败`)
     }
   } catch (error) {
-    console.error('切换 Skill 失败:', error)
+    console.error(`[Tools] 切换 Skill ${skill.name} 失败:`, error)
   }
 }
 
@@ -429,34 +470,40 @@ const toggleSelectAll = () => {
 const batchEnableSelected = async () => {
   if (!currentTool.value || selectedSkills.value.size === 0) return
   
+  console.log(`[Tools] 批量启用 ${selectedSkills.value.size} 个 Skills`)
+  
   for (const skillName of selectedSkills.value) {
     const skill = currentToolSkills.value.find(s => s.name === skillName)
     if (skill && !skill.active) {
-      await window.api.toggleSkill(currentTool.value.id, skillName, true)
+      // @ts-ignore
+      await window.api.updateToolSkills(currentTool.value.id, skillName, true)
       skill.active = true
     }
   }
   
   selectedSkills.value.clear()
   isMultiSelectMode.value = false
-  console.log('批量启用完成')
+  console.log('[Tools] 批量启用完成')
 }
 
 // 批量禁用选中的 Skills
 const batchDisableSelected = async () => {
   if (!currentTool.value || selectedSkills.value.size === 0) return
   
+  console.log(`[Tools] 批量禁用 ${selectedSkills.value.size} 个 Skills`)
+  
   for (const skillName of selectedSkills.value) {
     const skill = currentToolSkills.value.find(s => s.name === skillName)
     if (skill && skill.active) {
-      await window.api.toggleSkill(currentTool.value.id, skillName, false)
+      // @ts-ignore
+      await window.api.updateToolSkills(currentTool.value.id, skillName, false)
       skill.active = false
     }
   }
   
   selectedSkills.value.clear()
   isMultiSelectMode.value = false
-  console.log('批量禁用完成')
+  console.log('[Tools] 批量禁用完成')
 }
 
 // 复制路径到剪贴板

@@ -2,6 +2,8 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupSkillsIPC } from './ipc/skills'
+import { registerStorageHandlers } from './ipc/storage'
+import { initStorage } from './storage'
 import icon from '../../resources/icon.png?asset'
 
 function createWindow(): void {
@@ -41,6 +43,9 @@ function createWindow(): void {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  // 初始化存储系统
+  initStorage()
+  
   // 配置 HTTP 代理用于加速 API 请求
   app.commandLine.appendSwitch('proxy-server', '127.0.0.1:10809')
   // 禁用缓存以避免权限错误
@@ -81,6 +86,9 @@ app.whenReady().then(() => {
 
   // Register skills IPC handler
   setupSkillsIPC()
+  
+  // Register storage IPC handler
+  registerStorageHandlers()
 
   createWindow()
 

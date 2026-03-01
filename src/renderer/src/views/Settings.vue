@@ -6,199 +6,209 @@
     </header>
 
     <div class="scroll-area">
-      <!-- 通用 -->
-      <section class="settings-section">
-        <h2 class="section-title">通用</h2>
-        <div class="settings-card">
-          
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-name">Skills 存储目录</span>
-              <span class="setting-desc">所有 Skills 的存储位置</span>
+      <!-- 加载状态 -->
+      <div v-if="loading" class="loading-state">加载设置中...</div>
+      
+      <template v-else>
+        <!-- 通用 -->
+        <section class="settings-section">
+          <h2 class="section-title">通用</h2>
+          <div class="settings-card">
+            
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-name">Skills 存储目录</span>
+                <span class="setting-desc">所有 Skills 的存储位置</span>
+              </div>
+              <div class="setting-action">
+                <span class="path-text" :title="skillsDirectory">{{ skillsDirectory }}</span>
+                <button class="action-btn">更改</button>
+              </div>
             </div>
-            <div class="setting-action">
-              <span class="path-text">E:\AI\Skills\SkillManager\...</span>
-              <button class="action-btn">更改</button>
+            
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-name">默认编辑器</span>
+                <span class="setting-desc">用于打开 Skill 文件的编辑器</span>
+              </div>
+              <div class="setting-action">
+                <div class="dropdown-btn">
+                  <span class="icon">📝</span>
+                  <span class="text">{{ defaultEditor === 'built-in' ? 'Built-in Editor' : defaultEditor }}</span>
+                  <span class="arrow">▼</span>
+                </div>
+              </div>
             </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-name">自动同步</span>
+                <span class="setting-desc">编辑 Skill 后自动同步到已使用的工具</span>
+              </div>
+              <div class="setting-action">
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="autoSync" />
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="setting-row no-border">
+              <div class="setting-info">
+                <span class="setting-name">同步通知</span>
+                <span class="setting-desc">同步完成后显示通知提示</span>
+              </div>
+              <div class="setting-action">
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="syncNotification" />
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
           </div>
-          
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-name">默认编辑器</span>
-              <span class="setting-desc">用于打开 Skill 文件的编辑器</span>
-            </div>
-            <div class="setting-action">
-              <div class="dropdown-btn">
-                <span class="icon">📝</span>
-                <span class="text">Built-in Editor</span>
-                <span class="arrow">▼</span>
+        </section>
+
+        <!-- AI 配置 -->
+        <section class="settings-section">
+          <h2 class="section-title">AI 配置</h2>
+          <div class="settings-card">
+            <div class="setting-row no-border">
+              <div class="setting-info flex-column">
+                <span class="setting-name">Gemini API Key</span>
+                <span class="setting-desc">用于自动化翻译 Skill Markdown 到中文</span>
+              </div>
+              <div class="setting-action flex-row flex-1">
+                <input type="text" v-model="geminiApiKey" class="form-input flex-1" placeholder="输入 Gemini API Key" />
               </div>
             </div>
           </div>
+        </section>
 
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-name">自动同步</span>
-              <span class="setting-desc">编辑 Skill 后自动同步到已使用的工具</span>
+        <!-- 市场 -->
+        <section class="settings-section">
+          <h2 class="section-title">市场</h2>
+          <div class="settings-card">
+            <div class="setting-row">
+              <div class="setting-info flex-column">
+                <span class="setting-name">GitHub Token</span>
+                <span class="setting-desc">可选: 提高 GitHub API 限额，避免频繁访问失败</span>
+              </div>
+              <div class="setting-action flex-row flex-1">
+                <input type="text" v-model="githubToken" class="form-input flex-1" placeholder="输入 GitHub Personal Access Token" />
+              </div>
             </div>
-            <div class="setting-action">
-              <label class="toggle-switch">
-                <input type="checkbox" checked />
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
 
-          <div class="setting-row no-border">
-            <div class="setting-info">
-              <span class="setting-name">同步通知</span>
-              <span class="setting-desc">同步完成后显示通知提示</span>
+            <div class="setting-row">
+              <div class="setting-info flex-column">
+                <span class="setting-name">awesome-claude-skills</span>
+                <span class="setting-desc">第三方 API - https://github.com/ComposioHQ/awesome-claude-skills</span>
+              </div>
+              <div class="setting-action">
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="awesomeClaudeSkills" />
+                  <span class="slider"></span>
+                </label>
+              </div>
             </div>
-            <div class="setting-action">
-              <label class="toggle-switch">
-                <input type="checkbox" checked />
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
 
-        </div>
-      </section>
-
-      <!-- AI 配置 -->
-      <section class="settings-section">
-        <h2 class="section-title">AI 配置</h2>
-        <div class="settings-card">
-          <div class="setting-row no-border">
-            <div class="setting-info flex-column">
-              <span class="setting-name">Gemini API Key</span>
-              <span class="setting-desc">用于自动化翻译 Skill Markdown 到中文</span>
-            </div>
-            <div class="setting-action flex-row flex-1">
-              <input type="text" v-model="geminiApiKey" class="form-input flex-1" placeholder="输入 Gemini API Key" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 市场1 -->
-      <section class="settings-section">
-        <h2 class="section-title">市场</h2>
-        <div class="settings-card">
-          <div class="setting-row no-border">
-            <div class="setting-info flex-column">
-              <span class="setting-name">GitHub Token</span>
-              <span class="setting-desc">可选: 提高 GitHub API 限额，避免频繁访问失败</span>
-            </div>
-            <div class="setting-action flex-row">
-              <span class="placeholder-text">输入你的 GitHub Personal Access Token</span>
-              <button class="action-btn">添加</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 市场2 -->
-      <section class="settings-section">
-        <h2 class="section-title">市场</h2>
-        <div class="settings-card">
-          <div class="setting-row">
-            <div class="setting-info flex-column">
-              <span class="setting-name">GitHub Token</span>
-              <span class="setting-desc">可选: 提高 GitHub API 限额，避免频繁访问失败</span>
-            </div>
-            <div class="setting-action flex-row">
-              <span class="placeholder-text">输入你的 GitHub Personal Access Token</span>
-              <button class="action-btn">添加</button>
-            </div>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info flex-column">
-              <span class="setting-name">awesome-claude-skills</span>
-              <span class="setting-desc">第三方 API - https://github.com/ComposioHQ/awesome-claude-skills</span>
-            </div>
-            <div class="setting-action">
-               <label class="toggle-switch">
-                <input type="checkbox" checked />
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-
-           <div class="setting-row no-border">
-            <div class="setting-info flex-column">
-              <span class="setting-name">skills.sh</span>
-              <span class="setting-desc">第三方 API - https://skills.sh</span>
-            </div>
-            <div class="setting-action">
-               <label class="toggle-switch">
-                <input type="checkbox" checked />
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 外观 -->
-      <section class="settings-section">
-        <h2 class="section-title">外观</h2>
-        <div class="settings-card">
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-name">主题</span>
-              <span class="setting-desc">选择浅色、深色或跟随系统</span>
-            </div>
-            <div class="setting-action">
-              <div class="button-group">
-                <button class="btn-group-item">
-                  <span class="icon">☀️</span>
-                  浅色
-                </button>
-                <button class="btn-group-item">
-                  <span class="icon">🌙</span>
-                  深色
-                </button>
-                <button class="btn-group-item active-outline">
-                  <span class="icon">💻</span>
-                  跟随系统
-                </button>
+            <div class="setting-row no-border">
+              <div class="setting-info flex-column">
+                <span class="setting-name">skills.sh</span>
+                <span class="setting-desc">第三方 API - https://skills.sh</span>
+              </div>
+              <div class="setting-action">
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="skillsSh" />
+                  <span class="slider"></span>
+                </label>
               </div>
             </div>
           </div>
+        </section>
 
-          <div class="setting-row no-border">
-            <div class="setting-info">
-              <span class="setting-name">界面语言</span>
-              <span class="setting-desc">设置应用显示的语言</span>
+        <!-- 外观 -->
+        <section class="settings-section">
+          <h2 class="section-title">外观</h2>
+          <div class="settings-card">
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-name">主题</span>
+                <span class="setting-desc">选择浅色、深色或跟随系统</span>
+              </div>
+              <div class="setting-action">
+                <div class="button-group">
+                  <button 
+                    class="btn-group-item" 
+                    :class="{ 'active-outline': theme === 'light' }"
+                    @click="setTheme('light')"
+                  >
+                    <span class="icon">☀️</span>
+                    浅色
+                  </button>
+                  <button 
+                    class="btn-group-item" 
+                    :class="{ 'active-outline': theme === 'dark' }"
+                    @click="setTheme('dark')"
+                  >
+                    <span class="icon">🌙</span>
+                    深色
+                  </button>
+                  <button 
+                    class="btn-group-item" 
+                    :class="{ 'active-outline': theme === 'system' }"
+                    @click="setTheme('system')"
+                  >
+                    <span class="icon">💻</span>
+                    跟随系统
+                  </button>
+                </div>
+              </div>
             </div>
-            <div class="setting-action">
-              <div class="button-group">
-                 <button class="btn-group-item outline">English</button>
-                 <button class="btn-group-item solid-dark">中文</button>
+
+            <div class="setting-row no-border">
+              <div class="setting-info">
+                <span class="setting-name">界面语言</span>
+                <span class="setting-desc">设置应用显示的语言</span>
+              </div>
+              <div class="setting-action">
+                <div class="button-group">
+                  <button 
+                    class="btn-group-item" 
+                    :class="{ 'solid-dark': language === 'en-US', 'outline': language !== 'en-US' }"
+                    @click="setLanguage('en-US')"
+                  >
+                    English
+                  </button>
+                  <button 
+                    class="btn-group-item" 
+                    :class="{ 'solid-dark': language === 'zh-CN', 'outline': language !== 'zh-CN' }"
+                    @click="setLanguage('zh-CN')"
+                  >
+                    中文
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- 关于 -->
-      <section class="settings-section">
-        <h2 class="section-title">关于</h2>
-        <div class="settings-card about-card">
-          <div class="app-info">
-            <span class="app-name">Skills Manager</span>
-            <span class="app-desc">统一管理多 AI 工具的 Skills</span>
+        <!-- 关于 -->
+        <section class="settings-section">
+          <h2 class="section-title">关于</h2>
+          <div class="settings-card about-card">
+            <div class="app-info">
+              <span class="app-name">Skills Manager</span>
+              <span class="app-desc">统一管理多 AI 工具的 Skills</span>
+            </div>
+            <div class="version-row">
+              <span class="version-text">v1.1.4</span>
+              <button class="action-btn">检查更新</button>
+            </div>
+            <a href="#" class="privacy-link">隐私政策</a>
           </div>
-          <div class="version-row">
-            <span class="version-text">v1.1.4</span>
-            <button class="action-btn">检查更新</button>
-          </div>
-          <a href="#" class="privacy-link">隐私政策</a>
-        </div>
-      </section>
-
+        </section>
+      </template>
     </div>
   </div>
 </template>
@@ -206,25 +216,113 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 
+// 响应式数据
+const loading = ref(true)
+const skillsDirectory = ref('')
+const defaultEditor = ref('built-in')
+const autoSync = ref(true)
+const syncNotification = ref(true)
 const geminiApiKey = ref('')
+const githubToken = ref('')
+const awesomeClaudeSkills = ref(true)
+const skillsSh = ref(true)
+const theme = ref('system')
+const language = ref('zh-CN')
 
-function saveSettings() {
-  localStorage.setItem('GEMINI_API_KEY', geminiApiKey.value)
-  console.log('[Settings] Saved API Key:', geminiApiKey.value ? `${geminiApiKey.value.substring(0, 10)}...` : 'EMPTY')
-  alert('设置已保存')
+// 加载设置
+async function loadSettings() {
+  try {
+    loading.value = true
+    console.log('[Settings] 加载设置...')
+    
+    // @ts-ignore
+    const settings = await window.api.getAppSettings()
+    console.log('[Settings] 加载的设置:', settings)
+    
+    // 通用设置
+    skillsDirectory.value = settings.general.skillsDirectory
+    defaultEditor.value = settings.general.defaultEditor
+    autoSync.value = settings.general.autoSync
+    syncNotification.value = settings.general.syncNotification
+    
+    // AI 配置
+    geminiApiKey.value = settings.ai.geminiApiKey
+    
+    // 市场配置
+    githubToken.value = settings.market.githubToken
+    awesomeClaudeSkills.value = settings.market.enabledSources['awesome-claude-skills']
+    skillsSh.value = settings.market.enabledSources['skills-sh']
+    
+    // 外观设置
+    theme.value = settings.appearance.theme
+    language.value = settings.appearance.language
+    
+    console.log('[Settings] 设置加载完成')
+  } catch (error) {
+    console.error('[Settings] 加载设置失败:', error)
+    alert('加载设置失败，请重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 保存设置
+async function saveSettings() {
+  try {
+    console.log('[Settings] 保存设置...')
+    
+    const settings = {
+      version: '1.0.0',
+      general: {
+        skillsDirectory: skillsDirectory.value,
+        defaultEditor: defaultEditor.value,
+        autoSync: autoSync.value,
+        syncNotification: syncNotification.value
+      },
+      ai: {
+        geminiApiKey: geminiApiKey.value
+      },
+      market: {
+        githubToken: githubToken.value,
+        enabledSources: {
+          'awesome-claude-skills': awesomeClaudeSkills.value,
+          'skills-sh': skillsSh.value
+        }
+      },
+      appearance: {
+        theme: theme.value,
+        language: language.value
+      }
+    }
+    
+    // @ts-ignore
+    const success = await window.api.saveAppSettings(settings)
+    
+    if (success) {
+      console.log('[Settings] 设置保存成功')
+      alert('设置已保存')
+    } else {
+      console.error('[Settings] 设置保存失败')
+      alert('设置保存失败，请重试')
+    }
+  } catch (error) {
+    console.error('[Settings] 保存设置异常:', error)
+    alert('设置保存失败，请重试')
+  }
+}
+
+// 设置主题
+function setTheme(newTheme: string) {
+  theme.value = newTheme
+}
+
+// 设置语言
+function setLanguage(newLanguage: string) {
+  language.value = newLanguage
 }
 
 onMounted(() => {
-  const savedKey = localStorage.getItem('GEMINI_API_KEY')
-  console.log('[Settings] Loading saved API Key:', savedKey ? `${savedKey.substring(0, 10)}...` : 'NOT FOUND')
-  if (savedKey) {
-    geminiApiKey.value = savedKey
-  } else {
-    // 默认提供给开发或测试使用的 key
-    geminiApiKey.value = 'AIzaSyCHLSIgw32GieV6CdttdyIrZKaZGvsl0YU'
-    localStorage.setItem('GEMINI_API_KEY', geminiApiKey.value)
-    console.log('[Settings] Set default API Key:', geminiApiKey.value.substring(0, 10) + '...')
-  }
+  loadSettings()
 })
 </script>
 
@@ -279,6 +377,16 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 32px;
+}
+
+/* 加载状态 */
+.loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  font-size: 14px;
+  color: #6B7280;
 }
 
 /* 章节头部 */

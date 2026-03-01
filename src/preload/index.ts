@@ -3,19 +3,34 @@ import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
 const api = {
+  // 窗口控制
   windowMin: () => electronAPI.ipcRenderer.send('window-min'),
   windowMax: () => electronAPI.ipcRenderer.send('window-max'),
   windowClose: () => electronAPI.ipcRenderer.send('window-close'),
+  
+  // Skills 管理
   getSkills: (dirPath: string, apiKey?: string) => electronAPI.ipcRenderer.invoke('skills:getSkills', dirPath, apiKey),
   readDirTree: (dirPath: string) => electronAPI.ipcRenderer.invoke('skills:readDirTree', dirPath),
   readFile: (filePath: string) => electronAPI.ipcRenderer.invoke('skills:readFile', filePath),
   translateAndSave: (filePath: string, apiKey: string) => electronAPI.ipcRenderer.invoke('skills:translateAndSave', filePath, apiKey),
+  
+  // 工具管理
   checkToolsInstallation: (toolsConfig: Array<{name: string, dirName: string}>) => electronAPI.ipcRenderer.invoke('tools:checkToolsInstallation', toolsConfig),
   getToolSkills: (toolId: string, skillsPath: string) => electronAPI.ipcRenderer.invoke('tools:getToolSkills', toolId, skillsPath),
   toggleSkill: (toolId: string, skillName: string, enabled: boolean) => electronAPI.ipcRenderer.invoke('tools:toggleSkill', toolId, skillName, enabled),
   toggleTool: (toolId: string, enabled: boolean) => electronAPI.ipcRenderer.invoke('tools:toggleTool', toolId, enabled),
   getToolConfig: (toolId: string) => electronAPI.ipcRenderer.invoke('tools:getToolConfig', toolId),
-  saveToolConfig: (toolId: string, config: any) => electronAPI.ipcRenderer.invoke('tools:saveToolConfig', toolId, config)
+  saveToolConfig: (toolId: string, config: any) => electronAPI.ipcRenderer.invoke('tools:saveToolConfig', toolId, config),
+  
+  // 存储管理
+  getAppSettings: () => electronAPI.ipcRenderer.invoke('storage:getAppSettings'),
+  saveAppSettings: (settings: any) => electronAPI.ipcRenderer.invoke('storage:saveAppSettings', settings),
+  getToolsState: () => electronAPI.ipcRenderer.invoke('storage:getToolsState'),
+  saveToolsState: (state: any) => electronAPI.ipcRenderer.invoke('storage:saveToolsState', state),
+  getStorageToolConfig: (toolId: string) => electronAPI.ipcRenderer.invoke('storage:getToolConfig', toolId),
+  saveStorageToolConfig: (toolId: string, config: any) => electronAPI.ipcRenderer.invoke('storage:saveToolConfig', toolId, config),
+  updateToolEnabled: (toolId: string, enabled: boolean) => electronAPI.ipcRenderer.invoke('storage:updateToolEnabled', toolId, enabled),
+  updateToolSkills: (toolId: string, skillId: string, enabled: boolean) => electronAPI.ipcRenderer.invoke('storage:updateToolSkills', toolId, skillId, enabled)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
