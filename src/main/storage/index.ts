@@ -9,12 +9,20 @@ const DATA_DIR = path.join(app.getPath('userData'), 'data')
 const APP_SETTINGS_FILE = path.join(DATA_DIR, 'app-settings.json')
 const TOOLS_STATE_FILE = path.join(DATA_DIR, 'tools-state.json')
 
+// 内存缓存
+let appSettingsCache: any = null
+let toolsStateCache: any = null
+let cacheTimestamp = {
+  appSettings: 0,
+  toolsState: 0
+}
+
 // 默认配置
 const DEFAULT_APP_SETTINGS = {
   version: '1.0.0',
   general: {
     skillsDirectory: 'E:\\AITools\\SKillsManager\\Skills',
-    defaultEditor: 'built-in',
+    defaultEditor: 'vditor',
     autoSync: true,
     syncNotification: true
   },
@@ -51,18 +59,47 @@ function ensureDataDir(): void {
 }
 
 /**
- * 读取 JSON 文件
+ * 读取 JSON 文件（带缓存）
  */
-function readJsonFile<T>(filePath: string, defaultValue: T): T {
+function readJsonFile<T>(filePath: string, defaultValue: T, useCache: boolean = true): T {
   try {
     if (!fs.existsSync(filePath)) {
       console.log(`[Storage] 文件不存在，使用默认值: ${filePath}`)
       return defaultValue
     }
     
+    // 如果使用缓存，检查缓存是否有效
+    if (useCache) {
+      const stats = fs.statSync(filePath)
+      const fileModTime = stats.mtimeMs
+      
+      if (filePath === APP_SETTINGS_FILE && appSettingsCache && cacheTimestamp.appSettings >= fileModTime) {
+        console.log(`[Storage] 使用缓存: ${filePath}`)
+        return appSettingsCache
+      }
+      
+      if (filePath === TOOLS_STATE_FILE && toolsStateCache && cacheTimestamp.toolsState >= fileModTime) {
+        console.log(`[Storage] 使用缓存: ${filePath}`)
+        return toolsStateCache
+      }
+    }
+    
     const content = fs.readFileSync(filePath, 'utf8')
     const data = JSON.parse(content)
     console.log(`[Storage] 读取文件成功: ${filePath}`)
+    
+    // 更新缓存
+    if (useCache) {
+      const stats = fs.statSync(filePath)
+      if (filePath === APP_SETTINGS_FILE) {
+        appSettingsCache = data
+        cacheTimestamp.appSettings = stats.mtimeMs
+      } else if (filePath === TOOLS_STATE_FILE) {
+        toolsStateCache = data
+        cacheTimestamp.toolsState = stats.mtimeMs
+      }
+    }
+    
     return data
   } catch (error) {
     console.error(`[Storage] 读取文件失败: ${filePath}`, error)
@@ -79,6 +116,16 @@ function writeJsonFile(filePath: string, data: any): boolean {
     const content = JSON.stringify(data, null, 2)
     fs.writeFileSync(filePath, content, 'utf8')
     console.log(`[Storage] 写入文件成功: ${filePath}`)
+    
+    // 清除对应的缓存，强制下次重新读取
+    if (filePath === APP_SETTINGS_FILE) {
+      appSettingsCache = null
+      cacheTimestamp.appSettings = 0
+    } else if (filePath === TOOLS_STATE_FILE) {
+      toolsStateCache = null
+      cacheTimestamp.toolsState = 0
+    }
+    
     return true
   } catch (error) {
     console.error(`[Storage] 写入文件失败: ${filePath}`, error)
@@ -120,6 +167,17 @@ export function saveToolsState(state: any): boolean {
 export function getToolConfig(toolId: string): any {
   const toolsState = getToolsState()
   return toolsState.tools[toolId] || null
+}
+
+/**
+ * 清除所有缓存（用于调试或强制刷新）
+ */
+export function clearCache(): void {
+  console.log('[Storage] 清除所有缓存')
+  appSettingsCache = null
+  toolsStateCache = null
+  cacheTimestamp.appSettings = 0
+  cacheTimestamp.toolsState = 0
 }
 
 /**

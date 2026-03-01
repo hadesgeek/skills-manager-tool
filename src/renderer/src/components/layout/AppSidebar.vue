@@ -1,7 +1,8 @@
 <template>
   <aside class="sidebar">
     <div class="sidebar-header">
-      <span class="sidebar-title">Skills Manager</span>
+      <img :src="logoIcon" alt="Skills Manager" class="sidebar-logo" />
+      <a>Skills Manager Tool</a>
     </div>
 
     <nav class="nav-menu">
@@ -29,15 +30,16 @@
 
     <div class="sidebar-spacer"></div>
 
-    <div class="user-section">
+    <!-- <div class="user-section">
       <div class="user-avatar"></div>
       <span class="user-name">Personal</span>
-    </div>
+    </div> -->
   </aside>
 </template>
 
 <script setup lang="ts">
-// Sidebar logics
+// 导入 logo 图片
+import logoIcon from '../../assets/icon.png'
 </script>
 
 <style scoped>
@@ -57,11 +59,10 @@
   align-items: center;
 }
 
-.sidebar-title {
-  font-family: 'Inter', sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  color: #6B7280;
+.sidebar-logo {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
 }
 
 .nav-menu {

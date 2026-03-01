@@ -82,12 +82,20 @@
             <div class="path-row">
               <span class="path-label">配置路径</span>
               <span class="path-value">{{ tool.configPath || '未检测到' }}</span>
-              <button class="copy-btn" @click.stop="copyPath(tool.configPath)">📋</button>
+              <button class="folder-btn" @click.stop="selectDirectory(tool, 'config')" title="选择配置目录">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M10 4H4C2.89543 4 2 4.89543 2 6V18C2 19.1046 2.89543 20 4 20H20C21.1046 20 22 19.1046 22 18V8C22 6.89543 21.1046 6 20 6H12L10 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
             </div>
             <div class="path-row">
               <span class="path-label">Skills 路径</span>
               <span class="path-value">{{ tool.skillsPath || '未检测到' }}</span>
-              <button class="copy-btn" @click.stop="copyPath(tool.skillsPath)">📋</button>
+              <button class="folder-btn" @click.stop="selectDirectory(tool, 'skills')" title="选择 Skills 目录">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M10 4H4C2.89543 4 2 4.89543 2 6V18C2 19.1046 2.89543 20 4 20H20C21.1046 20 22 19.1046 22 18V8C22 6.89543 21.1046 6 20 6H12L10 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -382,7 +390,8 @@ const toggleTool = async (tool: Tool) => {
     if (newState) {
       // 开启工具
       // @ts-ignore
-      const toolConfig = await window.api.getStorageToolConfig(tool.id)
+      const toolsState = await window.api.getToolsState()
+      const toolConfig = toolsState.tools[tool.id]
       const hasSkills = toolConfig && toolConfig.enabledSkills && Object.keys(toolConfig.enabledSkills).length > 0
       
       if (!hasSkills) {
@@ -439,9 +448,10 @@ const loadToolSkills = async (tool: Tool) => {
     // 1. 从文件系统获取 Skills 列表
     const skills = await window.api.getToolSkills(tool.id, skillsPath.value)
     
-    // 2. 从持久化存储获取启用状态
+    // 2. 从持久化存储获取启用状态（一次性获取所有工具状态，使用缓存）
     // @ts-ignore
-    const toolConfig = await window.api.getStorageToolConfig(tool.id)
+    const toolsState = await window.api.getToolsState()
+    const toolConfig = toolsState.tools[tool.id]
     const enabledSkills = toolConfig?.enabledSkills || {}
     
     // 3. 合并状态
@@ -573,6 +583,48 @@ const copyPath = (path: string) => {
   if (!path) return
   navigator.clipboard.writeText(path)
   console.log('路径已复制:', path)
+}
+
+// 选择目录
+const selectDirectory = async (tool: Tool, type: 'config' | 'skills') => {
+  try {
+    console.log(`[Tools] 选择 ${tool.name} 的 ${type === 'config' ? '配置' : 'Skills'} 目录`)
+    
+    // 打开系统目录选择对话框
+    // @ts-ignore
+    const selectedPath = await window.api.openDirectory()
+    
+    if (!selectedPath) {
+      console.log('[Tools] 用户取消了目录选择')
+      return
+    }
+    
+    console.log(`[Tools] 用户选择的目录: ${selectedPath}`)
+    
+    // 更新工具对象
+    if (type === 'config') {
+      tool.configPath = selectedPath
+      // Skills 路径默认为配置路径下的 skills 子目录
+      tool.skillsPath = `${selectedPath}\\skills`
+    } else {
+      tool.skillsPath = selectedPath
+    }
+    
+    // 更新持久化存储
+    // @ts-ignore
+    await window.api.updateToolInstallation(
+      tool.id,
+      true, // 用户手动选择了目录，标记为已安装
+      tool.configPath,
+      tool.skillsPath
+    )
+    
+    console.log(`[Tools] ${tool.name} 的路径已更新`)
+    console.log(`[Tools] 配置路径: ${tool.configPath}`)
+    console.log(`[Tools] Skills 路径: ${tool.skillsPath}`)
+  } catch (error) {
+    console.error('[Tools] 选择目录失败:', error)
+  }
 }
 
 // 获取图标背景色
@@ -801,14 +853,15 @@ onMounted(() => {
   background: white;
   border-radius: 50%;
   position: absolute;
-  top: 3px;
+  top: 50%;
   left: 3px;
+  transform: translateY(-50%);
   transition: transform 0.3s;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .toggle-switch.active .toggle-knob {
-  transform: translateX(20px);
+  transform: translate(20px, -50%);
 }
 
 .settings-btn {
@@ -858,19 +911,27 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.copy-btn {
+.folder-btn {
   padding: 0.25rem 0.5rem;
   background: #f5f7fa;
   border: 1px solid #e1e8ed;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #657786;
 }
 
-.copy-btn:hover {
+.folder-btn:hover {
   background: #667eea;
   border-color: #667eea;
   color: white;
+}
+
+.folder-btn svg {
+  display: block;
 }
 
 .modal-header {
@@ -1231,7 +1292,8 @@ onMounted(() => {
   height: 20px;
   width: 20px;
   left: 2px;
-  bottom: 2px;
+  top: 50%;
+  transform: translateY(-50%);
   background-color: white;
   border-radius: 10px;
   transition: 0.3s;
@@ -1243,7 +1305,7 @@ input:checked + .slider {
 }
 
 input:checked + .slider:before {
-  transform: translateX(20px);
+  transform: translate(20px, -50%);
 }
 
 .skills-modal-footer {

@@ -408,7 +408,9 @@ async function checkOrTranslate(filePath: string) {
 }
 
 async function triggerTranslation(filePath: string) {
-  const apiKey = localStorage.getItem('GEMINI_API_KEY')
+  // @ts-ignore
+  const settings = await window.api.getAppSettings()
+  const apiKey = settings?.ai?.geminiApiKey || ''
   if (!apiKey) { targetContent.value = '错误: 请先在设置页面配置 Gemini API Key。'; return }
   isTranslating.value = true
   try {

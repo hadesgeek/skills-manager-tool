@@ -10,8 +10,12 @@ const api = {
   
   // Skills 管理
   getSkills: (dirPath: string, apiKey?: string) => electronAPI.ipcRenderer.invoke('skills:getSkills', dirPath, apiKey),
+  getSkillsFast: (dirPath: string) => electronAPI.ipcRenderer.invoke('skills:getSkillsFast', dirPath),
+  translateSkillDesc: (skillPath: string, apiKey: string) => electronAPI.ipcRenderer.invoke('skills:translateSkillDesc', skillPath, apiKey),
+  generateSkillIcon: (skillName: string, skillDesc: string, apiKey: string) => electronAPI.ipcRenderer.invoke('skills:generateSkillIcon', skillName, skillDesc, apiKey),
   readDirTree: (dirPath: string) => electronAPI.ipcRenderer.invoke('skills:readDirTree', dirPath),
   readFile: (filePath: string) => electronAPI.ipcRenderer.invoke('skills:readFile', filePath),
+  writeFile: (filePath: string, content: string) => electronAPI.ipcRenderer.invoke('skills:writeFile', filePath, content),
   translateAndSave: (filePath: string, apiKey: string) => electronAPI.ipcRenderer.invoke('skills:translateAndSave', filePath, apiKey),
   
   // 工具管理
@@ -31,7 +35,10 @@ const api = {
   saveStorageToolConfig: (toolId: string, config: any) => electronAPI.ipcRenderer.invoke('storage:saveToolConfig', toolId, config),
   updateToolEnabled: (toolId: string, enabled: boolean) => electronAPI.ipcRenderer.invoke('storage:updateToolEnabled', toolId, enabled),
   updateToolSkills: (toolId: string, skillId: string, enabled: boolean) => electronAPI.ipcRenderer.invoke('storage:updateToolSkills', toolId, skillId, enabled),
-  updateToolInstallation: (toolId: string, installed: boolean, configPath: string, skillsPath: string) => electronAPI.ipcRenderer.invoke('storage:updateToolInstallation', toolId, installed, configPath, skillsPath)
+  updateToolInstallation: (toolId: string, installed: boolean, configPath: string, skillsPath: string) => electronAPI.ipcRenderer.invoke('storage:updateToolInstallation', toolId, installed, configPath, skillsPath),
+  
+  // 对话框
+  openDirectory: () => electronAPI.ipcRenderer.invoke('dialog:openDirectory')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

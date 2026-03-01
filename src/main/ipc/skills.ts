@@ -1,6 +1,121 @@
 import { ipcMain } from 'electron'
 import { join, basename } from 'path'
 import * as fs from 'fs'
+import { app } from 'electron'
+import { getToolConfig as getStorageToolConfig, getAppSettings } from '../storage/index.js'
+
+/**
+ * 获取图标存储目录
+ */
+function getIconsDir(): string {
+    const dataDir = join(app.getPath('userData'), 'data', 'tools-imgs')
+    
+    // 确保目录存在
+    if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true })
+        console.log('[GetIconsDir] 创建图标目录:', dataDir)
+    }
+    
+    return dataDir
+}
+
+/**
+ * 获取图标映射文件路径
+ */
+function getIconMappingPath(): string {
+    const dataDir = join(app.getPath('userData'), 'data')
+    return join(dataDir, 'skill-icons.json')
+}
+
+/**
+ * 读取图标映射
+ */
+function readIconMapping(): Record<string, string> {
+    const mappingPath = getIconMappingPath()
+    
+    if (!fs.existsSync(mappingPath)) {
+        return {}
+    }
+    
+    try {
+        const content = fs.readFileSync(mappingPath, 'utf8')
+        return JSON.parse(content)
+    } catch (error) {
+        console.error('[ReadIconMapping] 读取图标映射失败:', error)
+        return {}
+    }
+}
+
+/**
+ * 保存图标映射
+ */
+function saveIconMapping(mapping: Record<string, string>): void {
+    const mappingPath = getIconMappingPath()
+    
+    try {
+        fs.writeFileSync(mappingPath, JSON.stringify(mapping, null, 2), 'utf8')
+        console.log('[SaveIconMapping] 图标映射已保存')
+    } catch (error) {
+        console.error('[SaveIconMapping] 保存图标映射失败:', error)
+    }
+}
+
+/**
+ * 获取 Skill 的图标路径
+ */
+function getSkillIconPath(skillName: string): string | undefined {
+    const mapping = readIconMapping()
+    const iconFileName = mapping[skillName]
+    
+    if (!iconFileName) {
+        return undefined
+    }
+    
+    const iconPath = join(getIconsDir(), iconFileName)
+    
+    if (!fs.existsSync(iconPath)) {
+        console.warn(`[GetSkillIconPath] 图标文件不存在: ${iconPath}`)
+        return undefined
+    }
+    
+    return iconPath
+}
+
+/**
+ * 保存 Skill 图标
+ */
+function saveSkillIcon(skillName: string, imageData: string): string {
+    const iconsDir = getIconsDir()
+    
+    // 生成文件名（使用 skill 名称 + 时间戳）
+    const timestamp = Date.now()
+    const fileName = `${skillName.replace(/[^a-zA-Z0-9-_]/g, '_')}_${timestamp}.png`
+    const iconPath = join(iconsDir, fileName)
+    
+    // 将 base64 数据写入文件
+    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '')
+    const buffer = Buffer.from(base64Data, 'base64')
+    fs.writeFileSync(iconPath, buffer)
+    
+    console.log(`[SaveSkillIcon] 图标已保存: ${iconPath}`)
+    
+    // 更新映射
+    const mapping = readIconMapping()
+    
+    // 删除旧图标文件（如果存在）
+    if (mapping[skillName]) {
+        const oldIconPath = join(iconsDir, mapping[skillName])
+        if (fs.existsSync(oldIconPath)) {
+            fs.unlinkSync(oldIconPath)
+            console.log(`[SaveSkillIcon] 删除旧图标: ${oldIconPath}`)
+        }
+    }
+    
+    mapping[skillName] = fileName
+    saveIconMapping(mapping)
+    
+    return iconPath
+}
 
 /**
  * 技能数据结构定义
@@ -10,6 +125,7 @@ export interface Skill {
     name: string    // 技能名称
     desc: string    // 技能描述
     path: string    // 技能目录路径
+    icon?: string   // 图标 URL（可选）
 }
 
 /**
@@ -20,6 +136,21 @@ export function setupSkillsIPC(): void {
     // 获取技能列表的 IPC 处理器
     ipcMain.handle('skills:getSkills', async (_, dirPath: string, apiKey?: string) => {
         return await readSkills(dirPath, apiKey)
+    })
+    
+    // 获取技能列表（快速版本，不等待翻译）
+    ipcMain.handle('skills:getSkillsFast', async (_, dirPath: string) => {
+        return await readSkillsFast(dirPath)
+    })
+    
+    // 翻译单个技能描述
+    ipcMain.handle('skills:translateSkillDesc', async (_, skillPath: string, apiKey: string) => {
+        return await translateSkillDesc(skillPath, apiKey)
+    })
+    
+    // 生成技能图标
+    ipcMain.handle('skills:generateSkillIcon', async (_, skillName: string, skillDesc: string, apiKey: string) => {
+        return await generateSkillIcon(skillName, skillDesc, apiKey)
     })
 
     // 读取目录树结构的 IPC 处理器
@@ -35,6 +166,31 @@ export function setupSkillsIPC(): void {
             if (err.code === 'ENOENT') return null // 文件不存在时静默返回 null
             throw err // 其他错误继续抛出
         }
+    })
+    
+    // 写入单个文件内容的 IPC 处理器
+    ipcMain.handle('skills:writeFile', async (_, filePath: string, content: string) => {
+        try {
+            await fs.promises.writeFile(filePath, content, 'utf8')
+            return true
+        } catch (err) {
+            console.error('[WriteFile] 写入文件失败:', err)
+            throw err
+        }
+    })
+    
+    // 打开目录选择对话框
+    ipcMain.handle('dialog:openDirectory', async () => {
+        const { dialog, BrowserWindow } = require('electron')
+        const result = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow()!, {
+            properties: ['openDirectory']
+        })
+        
+        if (result.canceled) {
+            return null
+        }
+        
+        return result.filePaths[0]
     })
 
     // 翻译文件并保存的 IPC 处理器
@@ -71,6 +227,253 @@ export function setupSkillsIPC(): void {
     ipcMain.handle('tools:saveToolConfig', async (_, toolId: string, config: any) => {
         return await saveToolConfig(toolId, config)
     })
+}
+
+/**
+ * 快速读取技能列表（不等待翻译）
+ * 立即返回基本信息，翻译和图标生成由前端异步调用
+ */
+async function readSkillsFast(dirPath: string): Promise<Skill[]> {
+    console.log(`[ReadSkillsFast] Starting with dirPath: ${dirPath}`)
+    
+    try {
+        // 检查目录是否存在
+        if (!fs.existsSync(dirPath)) {
+            console.log(`[ReadSkillsFast] Directory not found: ${dirPath}`)
+            return []
+        }
+
+        // 读取目录下的所有项目
+        const items = await fs.promises.readdir(dirPath, { withFileTypes: true })
+        const skills: Skill[] = []
+
+        // 遍历每个项目
+        for (const item of items) {
+            if (item.isDirectory()) {
+                const skillDirPath = join(dirPath, item.name)
+                // 尝试读取 SKILL.MD（大写）
+                const skillMdPath = join(skillDirPath, 'SKILL.MD')
+                // 尝试读取 skill.md（小写）
+                const skillMdPathLower = join(skillDirPath, 'skill.md')
+                // 描述翻译缓存文件路径
+                const descCachePath = join(skillDirPath, '.desc_cn.md')
+
+                let mdContent = ''
+                // 优先读取大写版本
+                if (fs.existsSync(skillMdPath)) {
+                    mdContent = await fs.promises.readFile(skillMdPath, 'utf8')
+                } else if (fs.existsSync(skillMdPathLower)) {
+                    // 如果大写不存在，读取小写版本
+                    mdContent = await fs.promises.readFile(skillMdPathLower, 'utf8')
+                }
+
+                if (mdContent) {
+                    let desc: string
+                    let icon: string | undefined
+                    let needsTranslation = false  // 标记是否需要翻译
+
+                    // 检查是否有缓存的翻译
+                    if (fs.existsSync(descCachePath)) {
+                        desc = (await fs.promises.readFile(descCachePath, 'utf8')).trim()
+                        console.log(`[ReadSkillsFast] ${item.name} - 使用缓存的描述`)
+                        needsTranslation = false
+                    } else {
+                        // 使用原始描述
+                        desc = extractDescription(mdContent)
+                        console.log(`[ReadSkillsFast] ${item.name} - 使用原始描述，需要翻译`)
+                        needsTranslation = true  // 没有缓存，需要翻译
+                    }
+                    
+                    // 从映射中获取图标路径
+                    const iconPath = getSkillIconPath(item.name)
+                    if (iconPath && fs.existsSync(iconPath)) {
+                        // 读取图片文件并转换为 base64
+                        const imageBuffer = fs.readFileSync(iconPath)
+                        const base64Image = imageBuffer.toString('base64')
+                        icon = `data:image/png;base64,${base64Image}`
+                        console.log(`[ReadSkillsFast] ${item.name} - 使用缓存的图标`)
+                    }
+
+                    // 添加技能到列表
+                    skills.push({
+                        id: item.name,
+                        name: item.name,
+                        desc,
+                        path: skillDirPath,
+                        icon,
+                        needsTranslation  // 添加标志位
+                    })
+                }
+            }
+        }
+
+        return skills
+    } catch (error) {
+        console.error('[ReadSkillsFast] Error reading skills directory:', error)
+        return []
+    }
+}
+
+/**
+ * 翻译单个技能描述
+ */
+async function translateSkillDesc(skillPath: string, apiKey: string): Promise<{ desc: string }> {
+    const skillName = basename(skillPath)
+    const startTime = Date.now()
+    const label = `[TranslateSkillDesc] ${skillName}`
+    
+    try {
+        console.log(`${label} - 开始翻译描述`)
+        
+        // 读取 SKILL.MD
+        const skillMdPath = join(skillPath, 'SKILL.MD')
+        const skillMdPathLower = join(skillPath, 'skill.md')
+        const descCachePath = join(skillPath, '.desc_cn.md')
+        
+        // 如果已有缓存，直接返回
+        if (fs.existsSync(descCachePath)) {
+            const desc = (await fs.promises.readFile(descCachePath, 'utf8')).trim()
+            console.log(`${label} - 使用缓存的翻译`)
+            return { desc }
+        }
+        
+        console.log(`${label} - 读取 Skill 文件...`)
+        let mdContent = ''
+        if (fs.existsSync(skillMdPath)) {
+            mdContent = await fs.promises.readFile(skillMdPath, 'utf8')
+            console.log(`${label} - 读取 SKILL.MD，大小: ${mdContent.length} 字符`)
+        } else if (fs.existsSync(skillMdPathLower)) {
+            mdContent = await fs.promises.readFile(skillMdPathLower, 'utf8')
+            console.log(`${label} - 读取 skill.md，大小: ${mdContent.length} 字符`)
+        }
+        
+        if (!mdContent) {
+            console.error(`${label} - Skill MD 文件未找到`)
+            throw new Error('Skill MD file not found')
+        }
+        
+        // 提取原始描述
+        const rawDesc = extractDescription(mdContent)
+        console.log(`${label} - 原始描述: ${rawDesc}`)
+        
+        // 翻译描述
+        console.log(`${label} - 调用翻译 API...`)
+        const translateStartTime = Date.now()
+        const desc = await translateDescription(rawDesc, apiKey)
+        const translateTime = Date.now() - translateStartTime
+        
+        console.log(`${label} - 翻译完成，耗时: ${translateTime}ms`)
+        console.log(`${label} - 翻译结果: ${desc}`)
+        
+        // 保存到缓存
+        await fs.promises.writeFile(descCachePath, desc, 'utf8')
+        console.log(`${label} - 翻译已保存到缓存`)
+        
+        const totalTime = Date.now() - startTime
+        console.log(`${label} - ✓ 翻译完成！总耗时: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`)
+        
+        return { desc }
+    } catch (error) {
+        const totalTime = Date.now() - startTime
+        console.error(`${label} - ✗ 翻译失败，耗时: ${totalTime}ms`)
+        console.error(`${label} - 错误详情:`, error)
+        throw error
+    }
+}
+
+/**
+ * 生成技能图标
+ * 使用 Gemini Nano Banana (gemini-2.5-flash-image) 模型生成图标
+ */
+async function generateSkillIcon(skillName: string, skillDesc: string, apiKey: string): Promise<{ icon: string }> {
+    const startTime = Date.now()
+    const label = `[GenerateSkillIcon] ${skillName}`
+    console.log(`[generateSkillIcon] API Key provided: ${apiKey ? 'YES (length: ' + apiKey.length + ')' : 'NO'}`)
+    try {
+        console.log(`${label} - 开始生成图标`)
+        console.log(`${label} - 描述: ${skillDesc}`)
+        
+        // 构建提示词（修改为 50x50）
+        const prompt = `A simple, clean, minimalist icon for a coding skill: ${skillName}. ${skillDesc}. Flat design, professional, vibrant colors, 50x50 pixels, icon only, no text.`
+        console.log(`${label} - 提示词: ${prompt}`)
+        
+        // 构建 Gemini Nano Banana API 请求 URL
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`
+        
+        const body = {
+            contents: [{
+                role: 'user',
+                parts: [{
+                    text: prompt
+                }]
+            }],
+            generationConfig: {
+                temperature: 0.9
+            }
+        }
+        
+        console.log(`${label} - 发送请求到 Nano Banana API...`)
+        const requestStartTime = Date.now()
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json; charset=utf-8'
+            },
+            body: JSON.stringify(body)
+        })
+        
+        const requestTime = Date.now() - requestStartTime
+        console.log(`${label} - 收到响应，耗时: ${requestTime}ms`)
+        console.log(`${label} - 响应状态: ${response.status} ${response.statusText}`)
+        
+        if (!response.ok) {
+            const errorText = await response.text()
+            console.error(`${label} - API 错误: ${response.status}`, errorText)
+            throw new Error(`Gemini Nano Banana API error: ${response.statusText}`)
+        }
+        
+        console.log(`${label} - 解析响应数据...`)
+        const data = await response.json()
+        
+        // 提取图像数据
+        const parts = data?.candidates?.[0]?.content?.parts || []
+        console.log(`${label} - 响应包含 ${parts.length} 个部分`)
+        
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i]
+            if (part.inlineData) {
+                const imageData = part.inlineData.data
+                const mimeType = part.inlineData.mimeType
+                
+                console.log(`${label} - 找到图像数据 (部分 ${i + 1})`)
+                console.log(`${label} - MIME 类型: ${mimeType}`)
+                console.log(`${label} - 数据大小: ${imageData.length} 字符 (约 ${Math.round(imageData.length * 0.75 / 1024)} KB)`)
+                
+                // 转换为 data URL
+                const dataUrl = `data:${mimeType};base64,${imageData}`
+                
+                // 保存图标到文件系统
+                console.log(`${label} - 保存图标到文件系统...`)
+                saveSkillIcon(skillName, dataUrl)
+                
+                const totalTime = Date.now() - startTime
+                console.log(`${label} - ✓ 图标生成成功！总耗时: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`)
+                
+                // 返回 data URL（而不是 file:// URL）
+                return { icon: dataUrl }
+            }
+        }
+        
+        console.error(`${label} - 响应中未找到图像数据`)
+        console.error(`${label} - 响应结构:`, JSON.stringify(data, null, 2))
+        throw new Error('No image data in response')
+    } catch (error) {
+        const totalTime = Date.now() - startTime
+        console.error(`${label} - ✗ 生成图标失败，耗时: ${totalTime}ms`)
+        console.error(`${label} - 错误详情:`, error)
+        throw error
+    }
 }
 
 /**
@@ -200,12 +603,26 @@ function extractDescription(mdContent: string): string {
 async function translateDescription(rawDesc: string, apiKey: string): Promise<string> {
     // 构建 Gemini API 请求 URL
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
-    // 构建请求体，禁用思维链以提升速度
+    
+    // 系统提示词
+    const systemPrompt = `Act as a professional localization expert. Translate the following skill description into natural, concise Simplified Chinese.
+    Requirements:
+    - Analyze & Summarize: Do not translate word-for-word. Extract the core functionality (what the skill does) and rephrase it.
+    - Tone: Professional, user-centric, and action-oriented.
+    - Constraint: Maximum 2 lines. Keep it punchy and avoid jargon.
+    - Format: Output only the translated result.`
+    
+    // 构建请求体，使用系统提示词和用户输入分离
     const body = {
+        system_instruction: {
+            parts: [{
+                text: systemPrompt
+            }]
+        },
         contents: [{
             role: 'user',
             parts: [{
-                text: `Translate the following text to natural Simplified Chinese. Keep it concise, no more than 2 lines.\n\n${rawDesc}`
+                text: rawDesc
             }]
         }],
         generationConfig: { 
@@ -336,12 +753,17 @@ async function translateAndSave(filePath: string, apiKey: string): Promise<strin
 
     // 构建 Gemini 2.5 Flash API 请求 URL
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
-    // 构建请求体，要求翻译为简体中文并保持 Markdown 格式，禁用思维链以提升速度
+    // 构建请求体，使用系统提示词和用户输入分离
     const body = {
+        system_instruction: {
+            parts: [{
+                text: '你是一个专业的 Markdown 文档翻译助手。将用户提供的 Markdown 文档翻译成自然流畅的简体中文。必须保持所有 Markdown 格式完整，包括代码块、标题、表格等。只返回翻译后的 Markdown 内容，不要添加任何解释或额外内容。'
+            }]
+        },
         contents: [{
             role: 'user',
             parts: [{
-                text: `Translate the following Markdown content to native, fluent Simplified Chinese. Keep all Markdown formatting intact, including code blocks, headers, and tables.\n\n${originalContent}`
+                text: originalContent
             }]
         }],
         generationConfig: {
@@ -493,18 +915,29 @@ function getDataDir(): string {
 }
 
 /**
- * 获取 Skills 管理目录（程序所在目录的 skills 文件夹）
+ * 获取 Skills 管理目录（从应用设置中读取）
  */
 function getSkillsManagerDir(): string {
-    const appPath = process.cwd()
-    const skillsDir = join(appPath, 'skills')
-    
-    if (!fs.existsSync(skillsDir)) {
-        console.log(`[GetSkillsManagerDir] Skills 目录不存在: ${skillsDir}`)
+    try {
+        const appSettings = getAppSettings()
+        const skillsDir = appSettings?.general?.skillsDirectory || ''
+        
+        if (!skillsDir) {
+            console.error(`[GetSkillsManagerDir] 应用设置中未配置 skillsDirectory`)
+            return ''
+        }
+        
+        if (!fs.existsSync(skillsDir)) {
+            console.error(`[GetSkillsManagerDir] Skills 目录不存在: ${skillsDir}`)
+            return ''
+        }
+        
+        console.log(`[GetSkillsManagerDir] Skills 目录: ${skillsDir}`)
+        return skillsDir
+    } catch (error) {
+        console.error(`[GetSkillsManagerDir] 读取 Skills 目录失败:`, error)
         return ''
     }
-    
-    return skillsDir
 }
 
 /**
@@ -589,30 +1022,22 @@ async function getToolSkills(toolId: string, skillsPath: string): Promise<Array<
 }
 
 /**
- * 从配置文件获取工具的 dirName
+ * 从持久化存储获取工具的 skillsPath
  */
-function getToolDirName(toolId: string): string {
+function getToolSkillsPath(toolId: string): string {
     try {
-        // 读取 tools-config.json
-        const configPath = join(__dirname, '../../renderer/src/config/tools-config.json')
-        const configContent = fs.readFileSync(configPath, 'utf8')
-        const toolsConfig = JSON.parse(configContent)
+        // 从持久化存储读取工具配置
+        const toolConfig = getStorageToolConfig(toolId)
         
-        // 根据 toolId 查找对应的工具配置
-        const tool = toolsConfig.find((t: any) => {
-            const id = t.name.toLowerCase().replace(/\s+/g, '-')
-            return id === toolId
-        })
-        
-        if (tool) {
-            return tool.dirName
+        if (toolConfig && toolConfig.skillsPath) {
+            return toolConfig.skillsPath
         }
         
-        // 如果找不到，返回默认值
-        return `.${toolId}`
+        console.error(`[GetToolSkillsPath] 工具 ${toolId} 的 skillsPath 未找到`)
+        return ''
     } catch (error) {
-        console.error(`[GetToolDirName] 读取配置失败:`, error)
-        return `.${toolId}`
+        console.error(`[GetToolSkillsPath] 读取配置失败:`, error)
+        return ''
     }
 }
 
@@ -620,7 +1045,6 @@ function getToolDirName(toolId: string): string {
  * 切换 Skill 状态
  */
 async function toggleSkill(toolId: string, skillName: string, enabled: boolean): Promise<boolean> {
-    const homeDir = process.env.HOME || process.env.USERPROFILE || ''
     const skillsManagerDir = getSkillsManagerDir()
     
     if (!skillsManagerDir) {
@@ -628,9 +1052,14 @@ async function toggleSkill(toolId: string, skillName: string, enabled: boolean):
         return false
     }
     
-    // 从配置文件获取工具的 dirName
-    const toolDirName = getToolDirName(toolId)
-    const toolSkillsDir = join(homeDir, toolDirName, 'skills')
+    // 从持久化存储获取工具的 skillsPath
+    const toolSkillsDir = getToolSkillsPath(toolId)
+    
+    if (!toolSkillsDir) {
+        console.error(`[ToggleSkill] 工具 ${toolId} 的 skillsPath 未找到`)
+        return false
+    }
+    
     const sourceSkillDir = join(skillsManagerDir, skillName)
     const targetSkillDir = join(toolSkillsDir, skillName)
     
@@ -640,6 +1069,12 @@ async function toggleSkill(toolId: string, skillName: string, enabled: boolean):
             console.log(`[ToggleSkill] 启用 ${skillName} for ${toolId}`)
             console.log(`[ToggleSkill] 源目录: ${sourceSkillDir}`)
             console.log(`[ToggleSkill] 目标目录: ${targetSkillDir}`)
+            
+            // 确保源目录存在
+            if (!fs.existsSync(sourceSkillDir)) {
+                console.error(`[ToggleSkill] 源 Skill 目录不存在: ${sourceSkillDir}`)
+                return false
+            }
             
             // 确保目标 skills 目录存在
             if (!fs.existsSync(toolSkillsDir)) {

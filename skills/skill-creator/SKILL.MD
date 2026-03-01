@@ -4,7 +4,7 @@ description: 帮助创建新的 AI Skill 配置文件
 
 # Skill Creator
 
-这是一个示例 Skill，用于演示 Skills Manager 的功能。
+这是一个示例 Skill，用于演示 Skills Manager Tool 的功能。
 
 ## 功能说明
 

@@ -2,7 +2,7 @@
   <header class="title-bar">
     <div class="title-left">
       <!-- 占位模拟标题区 -->
-      <span class="app-title">Skills Manager</span>
+      <span class="app-title">Skills Manager Tool</span>
     </div>
     
     <div class="title-right">

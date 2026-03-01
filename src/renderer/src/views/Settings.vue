@@ -26,18 +26,18 @@
               </div>
             </div>
             
-            <div class="setting-row">
+            <!-- <div class="setting-row">
               <div class="setting-info">
                 <span class="setting-name">默认编辑器</span>
                 <span class="setting-desc">用于打开 Skill 文件的编辑器</span>
               </div>
-              <div class="setting-action">
+             <div class="setting-action">
                 <div class="dropdown-btn">
                   <span class="icon">📝</span>
                   <span class="text">{{ defaultEditor === 'built-in' ? 'Built-in Editor' : defaultEditor }}</span>
                   <span class="arrow">▼</span>
                 </div>
-              </div>
+              </div> 
             </div>
 
             <div class="setting-row">
@@ -64,7 +64,7 @@
                   <span class="slider"></span>
                 </label>
               </div>
-            </div>
+            </div> -->
 
           </div>
         </section>
@@ -87,8 +87,8 @@
 
         <!-- 市场 -->
         <section class="settings-section">
-          <h2 class="section-title">市场</h2>
-          <div class="settings-card">
+          <h2 class="section-title">市场待开发</h2>
+          <!-- <div class="settings-card">
             <div class="setting-row">
               <div class="setting-info flex-column">
                 <span class="setting-name">GitHub Token</span>
@@ -124,7 +124,7 @@
                 </label>
               </div>
             </div>
-          </div>
+          </div> -->
         </section>
 
         <!-- 外观 -->
@@ -198,11 +198,11 @@
           <h2 class="section-title">关于</h2>
           <div class="settings-card about-card">
             <div class="app-info">
-              <span class="app-name">Skills Manager</span>
+              <span class="app-name">Skills Manager Tool</span>
               <span class="app-desc">统一管理多 AI 工具的 Skills</span>
             </div>
             <div class="version-row">
-              <span class="version-text">v1.1.4</span>
+              <span class="version-text">v1.0</span>
               <button class="action-btn">检查更新</button>
             </div>
             <a href="#" class="privacy-link">隐私政策</a>

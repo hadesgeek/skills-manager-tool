@@ -45,7 +45,7 @@ async function getToolSkills(toolId: string): Promise<Array<{name: string, activ
     const skillsManagerDir = getSkillsManagerDir()
     
     if (!skillsManagerDir) {
-        console.log(`[GetToolSkills] Skills manager directory not found`)
+        console.log(`[GetToolSkills] Skills Manager Tool directory not found`)
         return []
     }
     

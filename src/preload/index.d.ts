@@ -38,6 +38,9 @@ declare global {
       updateToolEnabled: (toolId: string, enabled: boolean) => Promise<boolean>
       updateToolSkills: (toolId: string, skillId: string, enabled: boolean) => Promise<boolean>
       updateToolInstallation: (toolId: string, installed: boolean, configPath: string, skillsPath: string) => Promise<boolean>
+      
+      // 对话框
+      openDirectory: () => Promise<string | null>
     }
   }
 }

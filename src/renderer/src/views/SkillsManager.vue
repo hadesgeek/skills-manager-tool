@@ -8,36 +8,76 @@
           <span class="text">刷新</span>
         </button>
         <div class="search-box">
-          <input type="text" placeholder="搜索 Skills" />
+          <input 
+            type="text" 
+            placeholder="搜索 Skills" 
+            v-model="searchQuery"
+            @keydown="handleSearch"
+          />
+          <button 
+            v-if="searchQuery" 
+            class="clear-search-btn" 
+            @click="clearSearch"
+            title="清空搜索"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9 3L3 9M3 3L9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
         </div>
-        <button class="primary-btn" @click="showModal = true">
+        <!-- <button class="primary-btn" @click="showModal = true">
           <span class="icon">+</span>
           <span class="text">新建 Skill</span>
-        </button>
+        </button> -->
       </div>
     </header>
 
     <div class="skills-content">
-      <p class="count-label">已激活 {{ skills.length }}</p>
+      <p class="count-label">
+        {{ searchQuery ? `找到 ${filteredSkills.length} 个匹配的 Skills` : `已管理 ${skills.length}个Skill` }}
+      </p>
 
       <div v-if="loading" class="loading-state">
         <p>正在加载技能...</p>
+      </div>
+      <div v-else-if="filteredSkills.length === 0 && searchQuery" class="empty-state">
+        <p>未找到匹配 "{{ searchQuery }}" 的 Skills</p>
+        <button class="btn cancel-btn" @click="clearSearch">清空搜索</button>
       </div>
       <div v-else-if="skills.length === 0" class="empty-state">
         <p>当前目录 ({{ skillsPath }}) 下没有发现技能，请点击右上方按钮新建。</p>
       </div>
 
       <div v-else class="skills-list">
-        <div v-for="skill in skills" :key="skill.id" class="skill-card" @click="goToEditor(skill)">
+        <div 
+          v-for="skill in filteredSkills" 
+          :key="skill.id" 
+          class="skill-card" 
+          @click="onCardClick(skill, $event)"
+        >
           <div class="skill-card-top">
             <div class="skill-card-left">
-              <div class="avator-mock">{{ skill.name.charAt(0).toUpperCase() }}</div>
+              <div 
+                class="avator-mock" 
+                :class="{ 'loading-icon': skill.generatingIcon }"
+                @mousedown="onIconMouseDown(skill, $event)"
+                @mouseup="onIconMouseUp($event)"
+                @mouseleave="onIconMouseLeave($event)"
+                @click.stop.prevent
+                :title="skill.generatingIcon ? '生成中...' : '长按重新生成图标'"
+              >
+                <img v-if="skill.icon" :src="skill.icon" :alt="skill.name" class="skill-icon-img" />
+                <span v-else>{{ skill.name.charAt(0).toUpperCase() }}</span>
+              </div>
               <div class="skill-info">
                 <div class="skill-name">
                   {{ skill.name }}
-                  <span class="status-dot"></span>
+                  <span class="status-dot" :class="{ 'status-active': skill.isActive }"></span>
+                  <span v-if="skill.translating" class="translating-badge">翻译中...</span>
                 </div>
-                <div class="skill-desc" :title="skill.desc">{{ skill.desc }}</div>
+                <div class="skill-desc" :class="{ 'loading-text': skill.translating }" :title="skill.desc">
+                  {{ skill.desc }}
+                </div>
               </div>
             </div>
             <!-- <button class="delete-btn" title="删除" @click.stop>✕</button> -->
@@ -76,7 +116,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Modal from '../components/common/Modal.vue'
 
@@ -87,6 +127,11 @@ interface Skill {
   name: string
   desc: string
   path: string
+  icon?: string
+  translating?: boolean  // 是否正在翻译
+  generatingIcon?: boolean  // 是否正在生成图标
+  isActive?: boolean  // 是否被某个已启用的工具使用
+  needsTranslation?: boolean  // 是否需要翻译（后端返回）
 }
 
 const showModal = ref(false)
@@ -94,20 +139,301 @@ const showModal = ref(false)
 const skills = ref<Skill[]>([])
 const loading = ref(false)
 const skillsPath = ref('E:\\AITools\\SKillsManager\\Skills') // TODO: Read from settings later
+const searchQuery = ref('') // 搜索关键词
 
+// 长按相关状态
+const longPressTimer = ref<number | null>(null)
+const isLongPressing = ref(false)
+const longPressSkill = ref<Skill | null>(null)
+
+// 过滤后的 Skills 列表
+const filteredSkills = computed(() => {
+  if (!searchQuery.value.trim()) {
+    return skills.value
+  }
+  
+  const query = searchQuery.value.toLowerCase().trim()
+  return skills.value.filter(skill => 
+    skill.name.toLowerCase().includes(query)
+  )
+})
+
+/**
+ * 快速加载 Skills（不等待翻译）
+ */
 async function fetchSkills() {
   loading.value = true
   try {
-    const apiKey = localStorage.getItem('GEMINI_API_KEY') || undefined
-    console.log('[SkillsManager] Fetching skills...')
-    console.log('[SkillsManager] API Key from localStorage:', apiKey ? `YES (${apiKey.substring(0, 10)}...)` : 'NO')
-    // @ts-ignore - Ignore type error if window.api doesn't have it defined in d.ts yet
-    skills.value = await window.api.getSkills(skillsPath.value, apiKey)
+    console.log('[SkillsManager] 快速加载 Skills...')
+    
+    // 1. 快速加载基本信息（使用缓存的翻译和图标）
+    // @ts-ignore
+    const fastSkills = await window.api.getSkillsFast(skillsPath.value)
+    skills.value = fastSkills.map(skill => ({
+      ...skill,
+      translating: false,
+      generatingIcon: false,
+      isActive: false
+    }))
+    
+    console.log(`[SkillsManager] 快速加载完成，共 ${skills.value.length} 个 Skills`)
+    
+    // 2. 检查 Skills 的激活状态
+    await checkSkillsActiveStatus()
+    
+    // 3. 异步处理需要翻译和生成图标的 Skills
+    // @ts-ignore
+    const settings = await window.api.getAppSettings()
+    const apiKey = settings?.ai?.geminiApiKey || ''
+    if (apiKey) {
+      processSkillsAsync(apiKey)
+    } else {
+      console.log('[SkillsManager] 未配置 API Key，跳过翻译和图标生成')
+    }
   } catch (error) {
-    console.error('Failed to load skills:', error)
+    console.error('[SkillsManager] 加载 Skills 失败:', error)
   } finally {
     loading.value = false
   }
+}
+
+/**
+ * 检查 Skills 的激活状态
+ * 如果某个 Skill 被某个已启用的工具使用，则标记为激活
+ */
+async function checkSkillsActiveStatus() {
+  try {
+    console.log('[SkillsManager] 检查 Skills 激活状态...')
+    
+    // 获取所有工具的状态
+    // @ts-ignore
+    const toolsState = await window.api.getToolsState()
+    
+    if (!toolsState || !toolsState.tools) {
+      console.log('[SkillsManager] 工具状态为空')
+      return
+    }
+    
+    // 遍历每个 Skill，检查是否被某个已启用的工具使用
+    for (const skill of skills.value) {
+      let isActive = false
+      
+      // 遍历所有工具
+      for (const [toolId, toolState] of Object.entries(toolsState.tools)) {
+        const tool = toolState as any
+        
+        // 检查工具是否启用
+        if (!tool.enabled) {
+          continue
+        }
+        
+        // 直接使用 toolsState 中的配置，不需要再次调用 API
+        const toolConfig = tool
+        
+        // 检查这个 Skill 是否在工具的启用列表中
+        if (toolConfig && toolConfig.enabledSkills && toolConfig.enabledSkills[skill.name]) {
+          isActive = true
+          console.log(`[SkillsManager] ${skill.name} 被工具 ${toolId} 使用`)
+          break
+        }
+      }
+      
+      skill.isActive = isActive
+    }
+    
+    console.log('[SkillsManager] Skills 激活状态检查完成')
+  } catch (error) {
+    console.error('[SkillsManager] 检查 Skills 激活状态失败:', error)
+  }
+}
+
+/**
+ * 异步处理 Skills 的翻译和图标生成
+ */
+async function processSkillsAsync(apiKey: string) {
+  console.log('[SkillsManager] 开始异步处理 Skills...')
+  
+  for (const skill of skills.value) {
+    // 使用后端返回的标志位判断是否需要翻译
+    const needsTranslation = skill.needsTranslation === true
+    
+    // 检查是否需要生成图标
+    const needsIcon = !skill.icon
+    
+    if (needsTranslation) {
+      // 翻译描述
+      console.log(`[SkillsManager] ${skill.name} 需要翻译`)
+      await translateSkill(skill, apiKey)
+    }
+    
+    if (needsIcon) {
+      // 生成图标（使用翻译后的描述）
+      console.log(`[SkillsManager] ${skill.name} 需要生成图标`)
+      await generateIcon(skill, apiKey)
+    }
+  }
+  
+  console.log('[SkillsManager] 异步处理完成')
+}
+
+/**
+ * 翻译单个 Skill 的描述
+ */
+async function translateSkill(skill: Skill, apiKey: string) {
+  try {
+    skill.translating = true
+    console.log(`[SkillsManager] 翻译 ${skill.name}...`)
+    
+    // @ts-ignore
+    const result = await window.api.translateSkillDesc(skill.path, apiKey)
+    
+    // 更新描述
+    skill.desc = result.desc
+    skill.translating = false
+    
+    console.log(`[SkillsManager] ${skill.name} 翻译完成`)
+  } catch (error) {
+    console.error(`[SkillsManager] 翻译 ${skill.name} 失败:`, error)
+    skill.translating = false
+  }
+}
+
+/**
+ * 生成单个 Skill 的图标
+ */
+async function generateIcon(skill: Skill, apiKey: string) {
+  try {
+    skill.generatingIcon = true
+    console.log(`[SkillsManager] 生成 ${skill.name} 的图标...`)
+    
+    // @ts-ignore
+    const result = await window.api.generateSkillIcon(skill.name, skill.desc, apiKey)
+    
+    // 更新图标（后端已保存到文件系统）
+    skill.icon = result.icon
+    skill.generatingIcon = false
+    
+    console.log(`[SkillsManager] ${skill.name} 图标生成完成`)
+  } catch (error) {
+    console.error(`[SkillsManager] 生成 ${skill.name} 图标失败:`, error)
+    skill.generatingIcon = false
+  }
+}
+
+/**
+ * 长按开始
+ */
+function onIconMouseDown(skill: Skill, event: MouseEvent) {
+  // 阻止事件冒泡，避免触发卡片点击
+  event.stopPropagation()
+  event.preventDefault()
+  
+  if (skill.generatingIcon) {
+    return
+  }
+  
+  isLongPressing.value = false
+  longPressSkill.value = skill
+  
+  // 设置长按定时器（500ms）
+  longPressTimer.value = window.setTimeout(() => {
+    isLongPressing.value = true
+    console.log(`[SkillsManager] 长按触发，重新生成 ${skill.name} 的图标`)
+    regenerateIcon(skill)
+  }, 500)
+}
+
+/**
+ * 长按结束或取消
+ */
+function onIconMouseUp(event: MouseEvent) {
+  event.stopPropagation()
+  event.preventDefault()
+  
+  // 清除定时器
+  if (longPressTimer.value) {
+    clearTimeout(longPressTimer.value)
+    longPressTimer.value = null
+  }
+  
+  // 延迟重置状态，确保 click 事件能检测到长按状态
+  setTimeout(() => {
+    isLongPressing.value = false
+    longPressSkill.value = null
+  }, 50)
+}
+
+/**
+ * 鼠标离开图标区域
+ */
+function onIconMouseLeave(event: MouseEvent) {
+  event.stopPropagation()
+  
+  // 清除定时器
+  if (longPressTimer.value) {
+    clearTimeout(longPressTimer.value)
+    longPressTimer.value = null
+  }
+  
+  // 延迟重置状态
+  setTimeout(() => {
+    isLongPressing.value = false
+    longPressSkill.value = null
+  }, 50)
+}
+
+/**
+ * 重新生成图标（长按触发）
+ */
+async function regenerateIcon(skill: Skill) {
+  if (skill.generatingIcon) {
+    console.log(`[SkillsManager] ${skill.name} 正在生成中，跳过`)
+    return
+  }
+  
+  // @ts-ignore
+  const settings = await window.api.getAppSettings()
+  const apiKey = settings?.ai?.geminiApiKey || ''
+  if (!apiKey) {
+    console.log('[SkillsManager] 未配置 API Key，无法重新生成图标')
+    return
+  }
+  
+  console.log(`[SkillsManager] 重新生成 ${skill.name} 的图标`)
+  await generateIcon(skill, apiKey)
+}
+
+/**
+ * 卡片点击事件
+ */
+function onCardClick(skill: Skill, event: MouseEvent) {
+  // 如果正在长按或刚刚长按过，不跳转
+  if (isLongPressing.value) {
+    console.log('[SkillsManager] 长按状态，阻止跳转')
+    event.preventDefault()
+    event.stopPropagation()
+    return
+  }
+  
+  goToEditor(skill)
+}
+
+/**
+ * 处理搜索（回车键触发）
+ */
+function handleSearch(event: KeyboardEvent) {
+  if (event.key === 'Enter') {
+    console.log(`[SkillsManager] 搜索: ${searchQuery.value}`)
+    // 搜索逻辑由 computed 自动处理
+  }
+}
+
+/**
+ * 清空搜索
+ */
+function clearSearch() {
+  searchQuery.value = ''
+  console.log('[SkillsManager] 清空搜索')
 }
 
 function goToEditor(skill: Skill) {
@@ -171,15 +497,44 @@ onMounted(() => {
   padding: 0 12px;
   display: flex;
   align-items: center;
+  position: relative;
 }
 
 .search-box input {
   border: none;
   outline: none;
   font-size: 13px;
-  color: #9CA3AF;
+  color: #1F2937;
   width: 100%;
   font-family: 'Inter', sans-serif;
+}
+
+.search-box input::placeholder {
+  color: #9CA3AF;
+}
+
+.clear-search-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #E5E7EB;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  color: #6B7280;
+  transition: all 0.2s;
+}
+
+.clear-search-btn:hover {
+  background: #D1D5DB;
+  color: #374151;
 }
 
 .primary-btn {
@@ -266,8 +621,8 @@ onMounted(() => {
 }
 
 .avator-mock {
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 50px;
   background-color: #EEF2FF;
   border-radius: 8px;
   flex-shrink: 0;
@@ -275,9 +630,44 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   font-family: 'Inter', sans-serif;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   color: #6366F1;
+  overflow: hidden;
+  position: relative;
+  padding: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.avator-mock:hover {
+  background-color: #DDD6FE;
+  transform: scale(1.05);
+}
+
+.skill-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+.loading-icon {
+  animation: pulse 1.5s ease-in-out infinite;
+  cursor: wait;
+}
+
+.loading-icon:hover {
+  transform: none;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .skill-info {
@@ -299,8 +689,13 @@ onMounted(() => {
 .status-dot {
   width: 6px;
   height: 6px;
-  background-color: #10B981;
+  background-color: #9CA3AF;
   border-radius: 50%;
+  transition: background-color 0.3s;
+}
+
+.status-dot.status-active {
+  background-color: #10B981;
 }
 
 .skill-desc {
@@ -313,6 +708,20 @@ onMounted(() => {
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.loading-text {
+  color: #9CA3AF;
+  font-style: italic;
+}
+
+.translating-badge {
+  font-size: 11px;
+  color: #6366F1;
+  background: #EEF2FF;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
 }
 
 .delete-btn {
@@ -436,6 +845,9 @@ onMounted(() => {
   font-family: 'Inter', sans-serif;
   font-size: 14px;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .cancel-btn:hover {
