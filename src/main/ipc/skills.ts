@@ -126,6 +126,7 @@ export interface Skill {
     desc: string    // 技能描述
     path: string    // 技能目录路径
     icon?: string   // 图标 URL（可选）
+    needsTranslation?: boolean  // 是否需要翻译（可选）
 }
 
 /**

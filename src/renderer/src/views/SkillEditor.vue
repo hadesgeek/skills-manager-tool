@@ -234,23 +234,24 @@ function destroyVditors() {
   if (targetVditorEl.value) targetVditorEl.value.innerHTML = ''
 }
 
-const VDITOR_OPTS = {
-  mode: 'ir' as const, // 即时渲染模式
-  cdn: '/vditor',
-  cache: { enable: false },
-  toolbar: ['headings', 'bold', 'italic', 'strike', 'line', 'list', 'ordered-list',
-            'code', 'inline-code', 'table', 'fullscreen', 'edit-mode', 'code-theme', 'content-theme', 'preview'] as any[],
-  preview: { 
-    hljs: { style: 'github', lineNumber: true },
-    mode: 'both' // 同时显示编辑和预览
-  },
-  height: '100%',
-  fullscreen: {
-    index: 999999
-  },
-  typewriterMode: false,
-  placeholder: ''
-}
+// Vditor 配置选项（保留供将来使用）
+// const VDITOR_OPTS = {
+//   mode: 'ir' as const, // 即时渲染模式
+//   cdn: '/vditor',
+//   cache: { enable: false },
+//   toolbar: ['headings', 'bold', 'italic', 'strike', 'line', 'list', 'ordered-list',
+//             'code', 'inline-code', 'table', 'fullscreen', 'edit-mode', 'code-theme', 'content-theme', 'preview'] as any[],
+//   preview: { 
+//     hljs: { style: 'github', lineNumber: true },
+//     mode: 'both' // 同时显示编辑和预览
+//   },
+//   height: '100%',
+//   fullscreen: {
+//     index: 999999
+//   },
+//   typewriterMode: false,
+//   placeholder: ''
+// }
 
 // 使用纯预览模式渲染（不使用编辑器）
 function renderPreviewOnly(el: HTMLDivElement, content: string) {

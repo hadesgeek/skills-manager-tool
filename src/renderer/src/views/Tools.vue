@@ -578,12 +578,12 @@ const batchDisableSelected = async () => {
   console.log('[Tools] 批量禁用完成')
 }
 
-// 复制路径到剪贴板
-const copyPath = (path: string) => {
-  if (!path) return
-  navigator.clipboard.writeText(path)
-  console.log('路径已复制:', path)
-}
+// 复制路径到剪贴板（保留供将来使用）
+// const copyPath = (path: string) => {
+//   if (!path) return
+//   navigator.clipboard.writeText(path)
+//   console.log('路径已复制:', path)
+// }
 
 // 选择目录
 const selectDirectory = async (tool: Tool, type: 'config' | 'skills') => {
@@ -627,15 +627,15 @@ const selectDirectory = async (tool: Tool, type: 'config' | 'skills') => {
   }
 }
 
-// 获取图标背景色
-const getIconBgColor = (id: string): string => {
-  const colors = [
-    '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', 
-    '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2'
-  ]
-  const index = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-  return colors[index % colors.length]
-}
+// 获取图标背景色（保留供将来使用）
+// const getIconBgColor = (id: string): string => {
+//   const colors = [
+//     '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', 
+//     '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2'
+//   ]
+//   const index = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+//   return colors[index % colors.length]
+// }
 
 // 组件挂载时加载工具列表
 onMounted(() => {

@@ -6,10 +6,12 @@ import { registerStorageHandlers } from './ipc/storage'
 import { initStorage } from './storage'
 import icon from '../../resources/icon.png?asset'
 
-// 扩展 Electron App 类型，添加 isQuitting 属性
-declare module 'electron' {
-  interface App {
-    isQuitting?: boolean
+// 扩展 App 类型，添加 isQuitting 属性
+declare global {
+  namespace Electron {
+    interface App {
+      isQuitting?: boolean
+    }
   }
 }
 
