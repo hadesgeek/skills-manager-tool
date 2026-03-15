@@ -54,6 +54,16 @@ declare global {
       
       // 对话框
       openDirectory: () => Promise<string | null>
+      
+      // 市场管理
+      installSkill: (source: string, target: string) => Promise<{
+        success: boolean
+        message: string
+        error?: {
+          code: string
+          details: string
+        }
+      }>
     }
   }
 }

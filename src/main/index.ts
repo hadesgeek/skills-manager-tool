@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupSkillsIPC } from './ipc/skills'
 import { registerStorageHandlers } from './ipc/storage'
+import { setupMarketIPC } from './ipc/market'
 import { initStorage } from './storage'
 import { logger } from './logger'
 import * as fs from 'fs'
@@ -33,7 +34,8 @@ function createWindow(): void {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-      devTools: is.dev // 只在开发环境启用 DevTools
+      devTools: is.dev, // 只在开发环境启用 DevTools
+      webviewTag: true // 启用 webview 标签支持
     }
   })
 
@@ -197,6 +199,25 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // Webview 安全配置
+  app.on('web-contents-created', (event, contents) => {
+    // 限制 webview 只能加载 skills.sh 域名
+    contents.on('will-navigate', (event, navigationUrl) => {
+      const parsedUrl = new URL(navigationUrl)
+      if (!parsedUrl.origin.includes('skills.sh')) {
+        event.preventDefault()
+        logger.warn('[Webview] 阻止导航到非 skills.sh 域名:', navigationUrl)
+      }
+    })
+    
+    // 禁止打开新窗口，在外部浏览器中打开
+    contents.setWindowOpenHandler(({ url }) => {
+      shell.openExternal(url)
+      logger.info('[Webview] 在外部浏览器中打开:', url)
+      return { action: 'deny' }
+    })
+  })
+
   // IPC test
   ipcMain.on('ping', () => logger.debug('pong'))
 
@@ -225,6 +246,9 @@ app.whenReady().then(() => {
   
   // Register storage IPC handler
   registerStorageHandlers()
+  
+  // Register market IPC handler
+  setupMarketIPC()
   
   // Register logger IPC handlers
   ipcMain.handle('logger:get-log-path', () => {

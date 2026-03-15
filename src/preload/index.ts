@@ -47,7 +47,10 @@ const api = {
   toggleDevTools: () => electronAPI.ipcRenderer.invoke('devtools:toggle'),
   
   // 对话框
-  openDirectory: () => electronAPI.ipcRenderer.invoke('dialog:openDirectory')
+  openDirectory: () => electronAPI.ipcRenderer.invoke('dialog:openDirectory'),
+  
+  // 市场管理
+  installSkill: (source: string, target: string) => electronAPI.ipcRenderer.invoke('market:installSkill', source, target)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
