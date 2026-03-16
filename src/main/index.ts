@@ -200,7 +200,7 @@ app.whenReady().then(() => {
   })
 
   // Webview 安全配置
-  app.on('web-contents-created', (event, contents) => {
+  app.on('web-contents-created', (_event, contents) => {
     // 限制 webview 只能加载 skills.sh 域名
     contents.on('will-navigate', (event, navigationUrl) => {
       const parsedUrl = new URL(navigationUrl)

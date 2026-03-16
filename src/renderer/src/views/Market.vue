@@ -350,18 +350,6 @@ async function handleInstall(): Promise<void> {
     if (result.success) {
       console.log('[Market] 安装成功')
       showSuccessNotification('Skill 安装成功！点击 Skills 页面的刷新按钮查看新安装的 Skill')
-      
-      // 可选：发送事件通知其他组件刷新
-      // 这里可以使用 EventBus 或其他方式通知 SkillsManager 组件刷新
-      try {
-        // 尝试通知主进程，可以用于后续的自动刷新功能
-        if (window.api && window.api.notifySkillInstalled) {
-          await window.api.notifySkillInstalled(targetDir)
-        }
-      } catch (notifyError) {
-        console.warn('[Market] 通知安装完成失败:', notifyError)
-        // 不影响主流程，继续执行
-      }
     } else {
       console.error('[Market] 安装失败:', result.error)
       showErrorNotification(`安装失败：${result.error?.details || '未知错误'}`)
